@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">FreakShowHost Einstellungen</title>
+  <desc id="desc">Übersicht der Einstellungsbereiche Darstellung, Pause, Ebenen, Verbindungen, Extras und Standard.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0a1720"/><stop offset="1" stop-color="#1d1432"/></linearGradient>
+    <linearGradient id="head" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#193049"/><stop offset="1" stop-color="#3b245f"/></linearGradient>
+    <style>.panel{fill:#0b121c;stroke:#40536b;stroke-width:2}.active{fill:#27476a;stroke:#7db6ff}.card{fill:#111d2a;stroke:#354d65}.title{font:700 28px 'Segoe UI',sans-serif;fill:#f5f7fb}.nav{font:700 18px 'Segoe UI',sans-serif;fill:#dbe7f5}.h{font:700 21px 'Segoe UI',sans-serif;fill:#fff}.t{font:16px 'Segoe UI',sans-serif;fill:#c1cfdf}.muted{font:14px 'Segoe UI',sans-serif;fill:#8096ad}.accent{fill:#73e3b4}</style>
+  </defs>
+  <rect width="1280" height="720" rx="26" fill="url(#bg)"/>
+  <rect x="36" y="32" width="1208" height="74" rx="14" fill="url(#head)" stroke="#536c86"/>
+  <text x="68" y="78" class="title">FreakShowHost · Einstellungen</text>
+  <rect x="36" y="126" width="270" height="558" rx="14" class="panel"/>
+  <rect x="55" y="153" width="232" height="54" rx="10" class="active"/>
+  <text x="82" y="187" class="nav">Darstellung</text>
+  <text x="82" y="254" class="nav">Pause</text>
+  <text x="82" y="318" class="nav">Ebenen</text>
+  <text x="82" y="382" class="nav">Verbindungen</text>
+  <text x="82" y="446" class="nav">Extras</text>
+  <text x="82" y="510" class="nav">Standard</text>
+  <text x="82" y="640" class="muted">Symbol oben rechts öffnet</text>
+  <text x="82" y="662" class="muted">diesen Bereich.</text>
+
+  <rect x="330" y="126" width="914" height="558" rx="14" class="panel"/>
+  <rect x="358" y="153" width="408" height="218" rx="12" class="card"/>
+  <circle cx="390" cy="188" r="8" class="accent"/><text x="414" y="196" class="h">Darstellung</text>
+  <text x="390" y="236" class="t">• Farbschema und UI-Transparenz</text>
+  <text x="390" y="272" class="t">• Schriftart der Oberfläche</text>
+  <text x="390" y="308" class="t">• Theme-abhängige Akzentfarben</text>
+  <text x="390" y="344" class="muted">Keine Funktionsfarbe wird unlesbar.</text>
+
+  <rect x="790" y="153" width="426" height="218" rx="12" class="card"/>
+  <circle cx="822" cy="188" r="8" fill="#9b7cf4"/><text x="846" y="196" class="h">Pause &amp; Ebenen</text>
+  <text x="822" y="236" class="t">• globales Pause-Tastenkürzel</text>
+  <text x="822" y="272" class="t">• App-Ausnahmen im Vordergrund</text>
+  <text x="822" y="308" class="t">• oben in der Liste = oben im Bild</text>
+  <text x="822" y="344" class="muted">Reihenfolge per Drag-and-drop.</text>
+
+  <rect x="358" y="395" width="408" height="255" rx="12" class="card"/>
+  <circle cx="390" cy="430" r="8" fill="#58c9ff"/><text x="414" y="438" class="h">Verbindungen</text>
+  <text x="390" y="478" class="t">• Streamer.bot Host und Port</text>
+  <text x="390" y="514" class="t">• echter Status des Overlay-PCs</text>
+  <text x="390" y="550" class="t">• erlaubte Geräte im LAN</text>
+  <text x="390" y="586" class="t">• Twitch OAuth und ACT optional</text>
+  <text x="390" y="624" class="muted">Secrets nie in Screenshots oder Git.</text>
+
+  <rect x="790" y="395" width="426" height="255" rx="12" class="card"/>
+  <circle cx="822" cy="430" r="8" fill="#ffb55e"/><text x="846" y="438" class="h">Extras &amp; Standard</text>
+  <text x="822" y="478" class="t">• Deutsch · English · Español</text>
+  <text x="822" y="514" class="t">• automatische Gruppenordner</text>
+  <text x="822" y="550" class="t">• Windows-Autostart</text>
+  <text x="822" y="586" class="t">• Grundeinstellungen zurücksetzen</text>
+  <text x="822" y="624" class="muted">Vor Reset wichtige lokale Daten sichern.</text>
+</svg>

@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="620" viewBox="0 0 1280 620" role="img" aria-labelledby="title desc">
+  <title id="title">FreakShowHost Verbindungsübersicht</title>
+  <desc id="desc">Streamer.bot, FreakShowHost, Browser im Heimnetz, Overlay-Ausgabe sowie optionale Twitch- und ACT-Verbindungen.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#07131c"/><stop offset="1" stop-color="#16102a"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10Z" fill="#65e8b5"/></marker>
+    <style>
+      .box{fill:#0d1a26;stroke:#536c86;stroke-width:2}.main{stroke:#65e8b5;stroke-width:3}.optional{stroke:#9a72e8}.title{font:700 24px 'Segoe UI',sans-serif;fill:#f5f7fa}.text{font:16px 'Segoe UI',sans-serif;fill:#cbd7e6}.small{font:14px 'Segoe UI',sans-serif;fill:#8fa4ba}.line{fill:none;stroke:#65e8b5;stroke-width:3;marker-end:url(#arrow)}.dash{stroke-dasharray:9 8}.tag{fill:#18392f;stroke:#65e8b5}.tagText{font:700 14px 'Segoe UI',sans-serif;fill:#88f1c8}
+    </style>
+  </defs>
+  <rect width="1280" height="620" rx="26" fill="url(#bg)"/>
+  <text x="54" y="62" class="title">FreakShowHost · Verbindungsweg</text>
+  <text x="54" y="92" class="small">Beispielwerte – keine Zugangsdaten im Repository speichern</text>
+
+  <rect x="470" y="170" width="340" height="240" rx="18" class="box main" filter="url(#glow)"/>
+  <text x="640" y="220" text-anchor="middle" class="title">FreakShowHost</text>
+  <text x="640" y="258" text-anchor="middle" class="text">Bridge + Steuerung</text>
+  <rect x="550" y="282" width="180" height="38" rx="19" class="tag"/>
+  <text x="640" y="307" text-anchor="middle" class="tagText">HTTP :18081</text>
+  <text x="640" y="352" text-anchor="middle" class="text">gemeinsamer Zustand</text>
+  <text x="640" y="380" text-anchor="middle" class="small">Logs und Konfiguration bleiben lokal</text>
+
+  <rect x="55" y="155" width="300" height="150" rx="16" class="box"/>
+  <text x="205" y="202" text-anchor="middle" class="title">Streamer.bot</text>
+  <text x="205" y="239" text-anchor="middle" class="text">WebSocket-Server</text>
+  <text x="205" y="270" text-anchor="middle" class="small">z. B. 127.0.0.1:8081</text>
+  <path d="M355 230H470" class="line"/>
+
+  <rect x="925" y="135" width="300" height="160" rx="16" class="box"/>
+  <text x="1075" y="182" text-anchor="middle" class="title">Overlay-Ausgabe</text>
+  <text x="1075" y="219" text-anchor="middle" class="text">transparentes WebView2-Fenster</text>
+  <text x="1075" y="250" text-anchor="middle" class="small">Video · Bild · Notiz · Web-Overlay</text>
+  <path d="M810 230H925" class="line"/>
+
+  <rect x="925" y="365" width="300" height="160" rx="16" class="box"/>
+  <text x="1075" y="412" text-anchor="middle" class="title">Browser im Heimnetz</text>
+  <text x="1075" y="449" text-anchor="middle" class="text">Steuerung von PC / Tablet</text>
+  <text x="1075" y="480" text-anchor="middle" class="small">http://HOST-IP:18081/</text>
+  <path d="M810 355C875 355 870 445 925 445" class="line"/>
+
+  <rect x="55" y="365" width="300" height="160" rx="16" class="box optional"/>
+  <text x="205" y="412" text-anchor="middle" class="title">Optional</text>
+  <text x="205" y="450" text-anchor="middle" class="text">Twitch OAuth</text>
+  <text x="205" y="480" text-anchor="middle" class="text">ACT / OverlayPlugin :10501</text>
+  <path d="M355 445C410 445 410 355 470 355" class="line dash"/>
+
+  <text x="640" y="574" text-anchor="middle" class="small">Firewall nur im privaten Netzwerk öffnen · LAN-Zugriff über die Freigabeliste begrenzen</text>
+</svg>

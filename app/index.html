@@ -1,0 +1,470 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <!-- Kein Referer aus dem Overlay senden -> verhaelt sich wie eine OBS-Browserquelle.
+         Streamlabs & Co. liefern sonst 404, wenn ein fremder Referer (127.0.0.1:<Port>)
+         mitgeschickt wird. Gilt fuer die Seite UND alle eingebetteten iframes. -->
+    <meta name="referrer" content="no-referrer" />
+    <style>html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }</style>
+
+    <!-- GSAP optional; der Emote-Rain funktioniert auch ohne GSAP.
+         async: darf den Overlay-Start NIE blockieren (z. B. wenn nach einem
+         PC-Neustart das Internet noch nicht bereit ist). -->
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js" async></script>
+    <script src="/app/overlay-config.js?v=20260618-hardoff"></script>
+    <!-- Streamer.bot-Client LOKAL: Verbindung zum Streamer.bot-PC ist reines LAN
+         und darf nicht vom Internet (CDN) abhaengen. -->
+    <script src="/app/streamerbot-client.js?v=20260704-local1"></script>
+    <!-- Instanz-Waechter: nur EINE Overlay-Instanz darf Ton ausgeben (kein Echo). -->
+    <script src="/app/overlay-instance-guard.js?v=20260704-guard1"></script>
+    <!-- App-Ausnahmen: Overlay aus, solange eine gewaehlte App im Vordergrund ist. -->
+    <script src="/app/overlay-app-exclude.js?v=20260704-excl1"></script>
+</head>
+
+<body>
+    <script>
+        // Modules load after this point. Keep their event listeners until the
+        // Streamer.bot client has finished loading from the network.
+        (function () {
+            var queuedListeners = [];
+            var queuedSubscriptions = [];
+            var queuedClient = {
+                on: function (eventName, handler) {
+                    if (typeof handler === 'function') {
+                        queuedListeners.push({ eventName: eventName, handler: handler });
+                    }
+                    return queuedClient;
+                },
+                subscribe: function (events) {
+                    queuedSubscriptions.push(events);
+                    return true;
+                }
+            };
+
+            window.client = queuedClient;
+            window.__KAPPI_ATTACH_STREAMERBOT_CLIENT__ = function (realClient) {
+                var i;
+                for (i = 0; i < queuedListeners.length; i++) {
+                    realClient.on(queuedListeners[i].eventName, queuedListeners[i].handler);
+                }
+                for (i = 0; i < queuedSubscriptions.length; i++) {
+                    if (typeof realClient.subscribe === 'function') {
+                        realClient.subscribe(queuedSubscriptions[i]);
+                    }
+                }
+                window.client = realClient;
+                console.log('[Kappi Overlay] Streamer.bot client ready; listeners attached:', queuedListeners.length);
+            };
+        })();
+    </script>
+
+    <!-- DO NOT REMOVE -->
+    <!-- Streamer.bot WebSocket configuration.
+         Bevorzugt die LOKALE Client-Bibliothek (kein Internet noetig, LAN reicht).
+         Nur wenn die fehlt: CDN-Fallback mit Wiederholversuchen, damit ein noch
+         nicht bereites Internet nach dem PC-Neustart nichts dauerhaft blockiert. -->
+    <script>
+        (function () {
+            var connectionWatchTimer = null;
+            var recoveryInFlight = false;
+            var disconnectedSince = 0;
+            var WATCH_INTERVAL_MS = 4000;
+            var RECOVERY_AFTER_MS = 8000;
+            var CONNECTING_STALE_MS = 15000;
+
+            // Die Streamer.bot-Bibliothek verbindet sich normalerweise selbst neu.
+            // Beim sehr fruehen Windows-Autostart kann der erste LAN-Versuch aber
+            // ohne verwertbares close-Ereignis haengen bleiben. Dieser unabhaengige
+            // Waechter greift nur ein, wenn der Socket wirklich laenger getrennt ist.
+            function startConnectionWatch(client) {
+                if (connectionWatchTimer) clearInterval(connectionWatchTimer);
+                disconnectedSince = Date.now();
+
+                function watchConnection() {
+                    if (!client || window.client !== client || typeof client.connect !== 'function') return;
+                    var socket = client.socket;
+                    var state = socket ? socket.readyState : 3;
+                    var now = Date.now();
+
+                    if (state === 1) {
+                        disconnectedSince = 0;
+                        recoveryInFlight = false;
+                        return;
+                    }
+                    if (!disconnectedSince) disconnectedSince = now;
+                    if (recoveryInFlight || state === 2) return;
+                    if (state === 0 && now - disconnectedSince < CONNECTING_STALE_MS) return;
+                    if (now - disconnectedSince < RECOVERY_AFTER_MS) return;
+
+                    recoveryInFlight = true;
+                    console.warn('[Kappi Overlay] Streamer.bot weiterhin getrennt; erneuter LAN-Verbindungsversuch.');
+                    Promise.resolve(client.connect(8000)).then(function () {
+                        console.log('[Kappi Overlay] Streamer.bot-Wiederverbindung erfolgreich.');
+                    }, function (err) {
+                        console.warn('[Kappi Overlay] Streamer.bot noch nicht erreichbar; Waechter versucht es erneut.', err);
+                    }).then(function () {
+                        recoveryInFlight = false;
+                        if (!client.socket || client.socket.readyState !== 1) disconnectedSince = Date.now();
+                    });
+                }
+
+                connectionWatchTimer = setInterval(watchConnection, WATCH_INTERVAL_MS);
+                setTimeout(watchConnection, WATCH_INTERVAL_MS);
+            }
+
+            function createClient(overlayConfig) {
+                var streamerBotClient = new StreamerbotClient({
+                    host: overlayConfig.host,
+                    port: overlayConfig.port,
+                    autoReconnect: true,
+                    retries: -1,
+                    subscribe: {
+                        General: ['Custom'],
+                        Twitch: ['ChatMessage', 'RewardRedemption']
+                    },
+                    onConnect: function () {
+                        disconnectedSince = 0;
+                        recoveryInFlight = false;
+                        console.log('[Kappi Overlay] Streamer.bot verbunden.');
+                    },
+                    onDisconnect: function () {
+                        if (!disconnectedSince) disconnectedSince = Date.now();
+                        console.warn('[Kappi Overlay] Streamer.bot getrennt; automatische Wiederverbindung bleibt aktiv.');
+                    },
+                    onData: function (payload) {
+                        window.__KAPPI_LAST_STREAMERBOT_PAYLOAD__ = payload;
+                        console.log('[Kappi Overlay Event]', payload);
+                        if (window.kappiEmoteRain && typeof window.kappiEmoteRain.handlePayload === 'function') {
+                            window.kappiEmoteRain.handlePayload(payload, 'window.client onData');
+                        }
+                    }
+                });
+                window.__KAPPI_ATTACH_STREAMERBOT_CLIENT__(streamerBotClient);
+                startConnectionWatch(streamerBotClient);
+                console.log('[Kappi Overlay] Streamer.bot client gestartet (' + overlayConfig.host + ':' + overlayConfig.port + ')');
+            }
+
+            function startClient() {
+                // Der localStorage von WebView2 (Overlay) und externem Browser
+                // (Einstellungsseite) ist getrennt. Deshalb ZUERST die geteilte
+                // Config von der Bridge holen - so uebernimmt das Overlay genau das,
+                // was in den Einstellungen gesetzt wurde. Erst wenn dort nichts
+                // konfiguriert ist, gilt der lokale Wert/Default.
+                var localConfig = window.KappiOverlayConfig
+                    ? window.KappiOverlayConfig.get()
+                    : { host: '127.0.0.1', port: 8081 };
+                if (window.KappiOverlayConfig && typeof window.KappiOverlayConfig.fetchShared === 'function') {
+                    window.KappiOverlayConfig.fetchShared(function (shared) {
+                        createClient(shared || localConfig);
+                    });
+                } else {
+                    createClient(localConfig);
+                }
+            }
+
+            var cdnTries = 0;
+            function loadFromCdn() {
+                cdnTries++;
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/@streamerbot/client/dist/streamerbot-client.js?r=' + cdnTries;
+                s.onload = function () {
+                    if (typeof StreamerbotClient === 'function') startClient();
+                };
+                s.onerror = function () {
+                    // Internet evtl. noch nicht bereit (PC-Neustart) -> mit Backoff neu versuchen.
+                    var delay = Math.min(30000, 2000 * cdnTries);
+                    console.warn('[Kappi Overlay] Streamer.bot-Client CDN fehlgeschlagen, neuer Versuch in ' + delay + 'ms');
+                    setTimeout(loadFromCdn, delay);
+                };
+                (document.head || document.documentElement).appendChild(s);
+            }
+
+            if (typeof StreamerbotClient === 'function') {
+                startClient();           // lokale Bibliothek geladen -> sofort, ohne Internet
+            } else {
+                loadFromCdn();           // Notfall: lokale Datei fehlt
+            }
+        })();
+    </script>
+
+    <script src="/app/video-overlay-manager.js?v=20260707-blockdisabled1"></script>
+    <script src="/app/emote-rain-anim.js?v=20260710-shapes2"></script>
+    <script src="/app/emote-rain-user.js?v=20260708-er9-sbtrigger"></script>
+    <script src="/app/overlay-layers.js?v=20260710-endgame"></script>
+    <script src="/app/overlay-images.js?v=20260711-imgtrigger"></script>
+    <script src="/app/overlay-heartbeat.js?v=20260711-hb1"></script>
+
+    <!-- Deine vorhandenen Module -->
+    <script type="module" src="/app/splat-channel-reward.js"></script>
+    <script type="module" src="/app/show-image.js"></script>
+    <script type="module" src="/app/emote-rain-extended.js"></script>
+    <script>
+        setTimeout(function () {
+            if (window.__KAPPI_EMOTE_RAIN_ACTIVE__) return;
+            var fallback = document.createElement('script');
+            fallback.src = '/app/emote-rain-extended.js';
+            fallback.onload = function () {
+                console.log('[Kappi Emote Rain] classic fallback loaded');
+            };
+            fallback.onerror = function () {
+                console.error('[Kappi Emote Rain] classic fallback failed');
+            };
+            document.body.appendChild(fallback);
+        }, 800);
+    </script>
+    <script src="/app/giphy-sb-local-overlay.js"></script>
+    <script src="/app/external-overlay-links.js?v=20260705-noref1"></script>
+    <script src="/app/kappi-markdown.js?v=20260712-md1"></script>
+    <script src="/app/endgame-cheatsheet.js?v=20260714-vars2"></script>
+    <!-- Beispiele für dedizierte Trigger-Dateien (bleiben wie gehabt) -->
+
+    <script type="module" src="media/videos/main/BA_9mm_GO_Bang/BA_9mm_GO_Bang.js"></script>
+    <script type="module" src="media/videos/main/BA_Blood/BA_Blood.js"></script>
+    <script type="module" src="media/videos/main/BA_Burning_Fire/BA_Burning_Fire.js"></script>
+    <script type="module" src="media/videos/main/BA_Chika_Dance/BA_Chika_Dance.js"></script>
+    <script type="module" src="media/videos/main/BA_Dark_Souls_You_suck/BA_Dark_Souls_You_suck.js"></script>
+    <script type="module" src="media/videos/main/BA_Flashbang/BA_Flashbang.js"></script>
+    <script type="module" src="media/videos/main/BA_Frieren_Pokedance/BA_Frieren_Pokedance.js"></script>
+    <script type="module" src="media/videos/main/BA_Good_Job/BA_Good_Job.js"></script>
+    <script type="module" src="media/videos/main/BA_Kim_Possible_intro/BA_Kim_Possible_intro.js"></script>
+    <script type="module" src="media/videos/main/BA_Light_Out/BA_Light_Out.js"></script>
+    <script type="module" src="media/videos/main/BA_Math_No_Fringe/BA_Math_No_Fringe.js"></script>
+    <script type="module" src="media/videos/main/BA_Money_Rain/BA_Money_Rain.js"></script>
+    <script type="module" src="media/videos/main/BA_Monitorputzen/BA_Monitorputzen.js"></script>
+    <script type="module" src="media/videos/main/BA_Nebelmaschine/BA_Nebelmaschine.js"></script>
+    <script type="module" src="media/videos/main/BA_Ready_GO_Failure/BA_Ready_GO_Failure.js"></script>
+    <script type="module" src="media/videos/main/BA_RosyGlasses/BA_RosyGlasses.js"></script>
+    <script type="module" src="media/videos/main/BA_SHOT/BA_SHOT.js"></script>
+    <script type="module" src="media/videos/main/BA_Smoke_Bomb/BA_Smoke_Bomb.js"></script>
+    <script type="module" src="media/videos/main/BA_Sounds_like_Skill_Issue/BA_Sounds_like_Skill_Issue.js"></script>
+    <script type="module" src="media/videos/main/BA_Spinningkid/BA_Spinningkid.js"></script>
+    <script type="module" src="media/videos/main/BA_Spongebob_Run/BA_Spongebob_Run.js"></script>
+    <script type="module" src="media/videos/main/BA_toothless_Dancing_25/BA_toothless_Dancing_25.js"></script>
+    <script type="module" src="media/videos/main/BA_anime_Verwirrung/BA_anime_Verwirrung.js"></script>
+    <script type="module" src="media/videos/main/BA_zero_2/BA_zero_2.js"></script>
+    <script type="module" src="media/videos/main/BA_Zero_Two_Dance_FF/BA_Zero_Two_Dance_FF.js"></script>
+    <script type="module" src="media/videos/fun/fun_1/bits-fun-1.js"></script>
+    <script type="module" src="media/videos/fun/fun_2/bits-fun-2.js"></script>
+    <script type="module" src="media/videos/fun/fun_3/bits-fun-3.js"></script>
+    <script type="module" src="media/videos/fun/fun_4/bits-fun-4.js"></script>
+    <script type="module" src="media/videos/fun/fun_5/bits-fun-5.js"></script>
+    <script type="module" src="media/videos/fun/fun_6/bits-fun-6.js"></script>
+    <script type="module" src="media/videos/fun/fun_7/bits-fun-7.js"></script>
+    <script type="module" src="media/videos/fun/fun_8/bits-fun-8.js"></script>
+    <script type="module" src="media/videos/fun/fun_9/bits-fun-9.js"></script>
+    <script type="module" src="media/videos/fun/fun_10/bits-fun-10.js"></script>
+    <script type="module" src="media/videos/fun/fun_11/bits-fun-11.js"></script>
+    <script type="module" src="media/videos/fun/fun_12/bits-fun-12.js"></script>
+    <script type="module" src="media/videos/fun/fun_13/bits-fun-13.js"></script>
+    <script type="module" src="media/videos/fun/fun_14/bits-fun-14.js"></script>
+    <script type="module" src="media/videos/fun/fun_15/bits-fun-15.js"></script>
+    <script type="module" src="media/videos/fun/fun_16/bits-fun-16.js"></script>
+    <script type="module" src="media/videos/suss/suss_1/bits-Suss-1.js"></script>
+    <script type="module" src="media/videos/suss/suss_2/bits-Suss-2.js"></script>
+    <script type="module" src="media/videos/suss/suss_3/bits-Suss-3.js"></script>
+    <script type="module" src="media/videos/suss/suss_4/bits-Suss-4.js"></script>
+    <script type="module" src="media/videos/suss/suss_5/bits-Suss-5.js"></script>
+    <script type="module" src="media/videos/suss/suss_6/bits-Suss-6.js"></script>
+    <script type="module" src="media/videos/suss/suss_7/bits-Suss-7.js"></script>
+    <script type="module" src="media/videos/suss/suss_8/bits-Suss-8.js"></script>
+    <script type="module" src="media/videos/suss/suss_9/bits-Suss-9.js"></script>
+    <script type="module" src="media/videos/suss/suss_10/bits-Suss-10.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_1/bits-Horror-1.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_2/bits-Horror-2.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_3/bits-Horror-3.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_4/bits-Horror-4.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_5/bits-Horror-5.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_6/bits-Horror-6.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_7/bits-Horror-7.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_8/bits-Horror-8.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_9/bits-Horror-9.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_10/bits-Horror-10.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_11/bits-Horror-11.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_12/bits-Horror-12.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_13/bits-Horror-13.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_14/bits-Horror-14.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_15/bits-Horror-15.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_16/bits-Horror-16.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_17/bits-Horror-17.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_18/bits-Horror-18.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_19/bits-Horror-19.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_20/bits-Horror-20.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_21/bits-Horror-21.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_22/bits-Horror-22.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_23/bits-Horror-23.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_24/bits-Horror-24.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_25/bits-Horror-25.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_26/bits-Horror-26.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_27/bits-Horror-27.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_28/bits-Horror-28.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_29/bits-Horror-29.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_30/bits-Horror-30.js"></script>
+    <script type="module" src="media/videos/HORROR/horror_31/bits-Horror-31.js"></script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

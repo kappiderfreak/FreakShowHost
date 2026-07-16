@@ -1,0 +1,59 @@
+<svg viewBox="0 0 960 560" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="960" height="560" rx="16" fill="#ffffff"/>
+  <rect x="0.5" y="0.5" width="959" height="559" rx="16" fill="none" stroke="#d0d7de"/>
+  <text x="480" y="44" text-anchor="middle" font-size="26" font-weight="700" fill="#1f2328">FreakShowHost — how it works</text>
+
+  <!-- Central single-process container -->
+  <rect x="300" y="118" width="360" height="232" rx="14" fill="#eef2ff" stroke="#6b83f0" stroke-width="2"/>
+  <text x="480" y="146" text-anchor="middle" font-size="16" font-weight="700" fill="#3446a8">FreakShowHost.exe  ·  one process</text>
+
+  <rect x="325" y="166" width="310" height="72" rx="10" fill="#ffffff" stroke="#9aa7d6"/>
+  <text x="480" y="196" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Overlay window</text>
+  <text x="480" y="218" text-anchor="middle" font-size="12" fill="#57606a">WebView2 · transparent · always on top</text>
+
+  <rect x="325" y="250" width="310" height="82" rx="10" fill="#ffffff" stroke="#9aa7d6"/>
+  <text x="480" y="278" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Embedded bridge</text>
+  <text x="480" y="298" text-anchor="middle" font-size="12" fill="#57606a">PowerShell · HTTP :18081</text>
+  <text x="480" y="316" text-anchor="middle" font-size="12" fill="#57606a">WebSocket relay :18082</text>
+
+  <!-- Streamer.bot (left) -->
+  <rect x="40" y="198" width="180" height="94" rx="12" fill="#e9f7ef" stroke="#2ea36a" stroke-width="2"/>
+  <text x="130" y="236" text-anchor="middle" font-size="16" font-weight="700" fill="#1f7a4d">Streamer.bot</text>
+  <text x="130" y="260" text-anchor="middle" font-size="12" fill="#57606a">triggers · chat</text>
+  <text x="130" y="278" text-anchor="middle" font-size="12" fill="#57606a">rewards</text>
+  <line x1="220" y1="245" x2="298" y2="245" stroke="#57606a" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="259" y="236" text-anchor="middle" font-size="11" fill="#1f7a4d">WebSocket</text>
+
+  <!-- OBS Studio (right) -->
+  <rect x="740" y="186" width="180" height="118" rx="12" fill="#fdecef" stroke="#d64562" stroke-width="2"/>
+  <text x="830" y="214" text-anchor="middle" font-size="16" font-weight="700" fill="#b3324c">OBS Studio</text>
+  <text x="830" y="238" text-anchor="middle" font-size="12" fill="#57606a">Browser Source or</text>
+  <text x="830" y="256" text-anchor="middle" font-size="12" fill="#57606a">window capture</text>
+  <text x="830" y="286" text-anchor="middle" font-size="12" font-weight="700" fill="#b3324c">→ your stream</text>
+  <line x1="662" y1="206" x2="740" y2="230" stroke="#57606a" stroke-width="2.5" marker-end="url(#arr)"/>
+  <text x="701" y="201" text-anchor="middle" font-size="11" fill="#b3324c">overlay</text>
+
+  <!-- Control page (bottom-left) -->
+  <rect x="118" y="420" width="236" height="96" rx="12" fill="#fff6e6" stroke="#e0a83e" stroke-width="2"/>
+  <text x="236" y="452" text-anchor="middle" font-size="15" font-weight="700" fill="#a5741a">Control page (browser)</text>
+  <text x="236" y="474" text-anchor="middle" font-size="12" fill="#57606a">DE / EN / ES · any browser</text>
+  <text x="236" y="492" text-anchor="middle" font-size="12" fill="#57606a">configure overlays live</text>
+  <line x1="312" y1="334" x2="236" y2="418" stroke="#57606a" stroke-width="2.5" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="248" y="382" text-anchor="middle" font-size="11" fill="#a5741a">HTTP</text>
+
+  <!-- LAN devices (bottom-right) -->
+  <rect x="606" y="420" width="236" height="96" rx="12" fill="#eaf6fb" stroke="#3d9bc9" stroke-width="2"/>
+  <text x="724" y="452" text-anchor="middle" font-size="15" font-weight="700" fill="#2a6f92">Other PC / phone (LAN)</text>
+  <text x="724" y="474" text-anchor="middle" font-size="12" fill="#57606a">IP allow-list</text>
+  <text x="724" y="492" text-anchor="middle" font-size="12" fill="#57606a">same, synced config</text>
+  <line x1="648" y1="334" x2="724" y2="418" stroke="#57606a" stroke-width="2.5" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <text x="712" y="382" text-anchor="middle" font-size="11" fill="#2a6f92">HTTP · 0.0.0.0</text>
+
+  <text x="480" y="372" text-anchor="middle" font-size="11" fill="#57606a">settings in data/config · your media in Content/</text>
+
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
+    </marker>
+  </defs>
+</svg>

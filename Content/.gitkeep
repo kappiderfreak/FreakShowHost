@@ -1,0 +1,4 @@
+# Deine Medien kommen hierher (werden NICHT ins Repo committet – siehe .gitignore).
+# Erwartete Unterordner (bei Bedarf selbst anlegen oder von der App erzeugt):
+#   Content/media/videos/<Gruppe>/<Effekt>/   Content/backgrounds/   Content/images/
+#   Content/notes/emojis/   Content/uploads/   Content/html-overlays/

@@ -1,0 +1,41 @@
+# ===== FreakShowHost – .gitignore =====
+# Ziel: NUR Code/Build-Skripte ins Repo. KEINE Medien (urheberrechtlich + groß),
+# keine persönlichen Einstellungen, keine Build-/Laufzeit-Artefakte.
+# WICHTIG: git ignoriert diese Dinge nur – auf der Platte bleibt ALLES erhalten.
+
+# --- Build-Artefakte ---
+*.exe
+!FreakShowHost.exe
+*.new.exe
+*.pdb
+*.suo
+obj/
+bin/
+
+# --- WebView2-Profil / Browser-Cache (ephemer, groß) ---
+WebView2UserData/
+
+# --- Logs ---
+Logs/
+*.log
+
+# --- Persönliche Nutzerdaten & Laufzeit-Zustand ---
+# (Cheatsheet, Bilder-/Video-Overlays, LAN-/IP-Freigabe, Streamer.bot-Config, UI-State …)
+data/config/*
+!data/config/.gitkeep
+data/state/*
+!data/state/.gitkeep
+
+# --- Medien: NICHT im Repo (urheberrechtlich geschützt + ~0,6 GB) ---
+# Nutzer bringen ihre eigenen Bilder/Videos/Hintergründe mit.
+Content/*
+!Content/.gitkeep
+
+# --- Maschinenspezifische Pfad-Config (App defaultet ohne sie auf <exe-Ordner>\Content) ---
+FreakShowHost.config.json
+
+# --- OS-/Editor-Krempel ---
+Thumbs.db
+desktop.ini
+.DS_Store
+*.tmp
