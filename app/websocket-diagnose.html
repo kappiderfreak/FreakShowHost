@@ -14356,9 +14356,10 @@
         // alles viel zu groß.
         box.style.borderStyle = 'solid';
         box.style.borderColor = (p.frameColor || '#101826');
-        box.style.borderWidth = Math.max(0.75, 2 * scale) + 'px';
+        box.style.borderWidth = (2 * scale) + 'px';
         box.style.padding = (10 * scale) + 'px ' + (12 * scale) + 'px';
         box.style.borderRadius = (10 * scale) + 'px';
+        box.style.boxShadow = '0 ' + (6 * scale) + 'px ' + (24 * scale) + 'px rgba(0,0,0,.45)';
         box.title = p.name || 'Text';
         var bg = box.querySelector('.cheat-mon-bg'), txt = box.querySelector('.cheat-mon-text');
         if (p.mode === 'image' && p.bgImage) {
@@ -14382,6 +14383,14 @@
           previewImageEmojis[pie].style.maxWidth = '100%';
           previewImageEmojis[pie].style.objectFit = 'contain';
           previewImageEmojis[pie].style.verticalAlign = 'middle';
+        }
+        // kappi-markdown.js setzt Tabellen-Zellen absichtlich mit festen CSS-Pixeln
+        // (1px Rahmen, 2px/8px Padding). Auch diese Pixel muessen im kleinen Monitor
+        // skaliert werden; sonst bricht dieselbe Tabelle hier anders um als im Overlay.
+        var previewCells = txt.querySelectorAll('th, td');
+        for (var pci = 0; pci < previewCells.length; pci++) {
+          previewCells[pci].style.borderWidth = (1 * scale) + 'px';
+          previewCells[pci].style.padding = (2 * scale) + 'px ' + (8 * scale) + 'px';
         }
         txt.style.color = p.textColor || '#e8f0ff';
         txt.style.opacity = String((p.textOpacity == null ? 100 : p.textOpacity) / 100);
@@ -14412,7 +14421,14 @@
           return;
         }
 
-        var scale = (mon.clientWidth || 500) / clampDimension(byId('cfg-monitor-width').value, 1920);
+        // Absolute CSS-Pixel (Schrift, Padding, Rahmen, Bild-Emoji) gegen die echte
+        // Overlay-WebView skalieren. Die konfigurierte Monitorbreite sind physische
+        // Pixel; unter Windows-DPI kann der CSS-Viewport davon abweichen.
+        var reportedViewportWidth = Number(window.__KAPPI_HOST_VIEWPORT_WIDTH__) || 0;
+        var outputViewportWidth = reportedViewportWidth > 0
+          ? reportedViewportWidth
+          : clampDimension(byId('cfg-monitor-width').value, 1920);
+        var scale = (mon.clientWidth || 500) / outputViewportWidth;
         if (cheatSelectedGroup) {
           for (var i = 0; i < groupItems.length; i++) {
             var gp = groupItems[i];
@@ -15628,6 +15644,16 @@
       }
       function renderHostStatus(r) {
         var running = !!(r && r.overlayRunning), conn = !!(r && r.sbConnected);
+        var reportedViewportWidth = Number(r && r.viewportWidth) || 0;
+        var previousViewportWidth = Number(window.__KAPPI_HOST_VIEWPORT_WIDTH__) || 0;
+        if (running && reportedViewportWidth > 0) {
+          window.__KAPPI_HOST_VIEWPORT_WIDTH__ = reportedViewportWidth;
+          window.__KAPPI_HOST_VIEWPORT_HEIGHT__ = Number(r && r.viewportHeight) || 0;
+          window.__KAPPI_HOST_DEVICE_PIXEL_RATIO__ = Number(r && r.devicePixelRatio) || 1;
+          if (Math.abs(previousViewportWidth - reportedViewportWidth) >= 1 && typeof cheatRenderMonitor === 'function') {
+            cheatRenderMonitor();
+          }
+        }
         var dotCls, color, mainTxt, ovlTxt;
         if (!running) {
           dotCls = 'conn-dot'; color = '#f0b878';

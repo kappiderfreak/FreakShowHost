@@ -22,7 +22,13 @@
       x.open('POST', URL_, true);
       x.timeout = 2000;
       x.setRequestHeader('Content-Type', 'application/json');
-      x.send(JSON.stringify({ source: 'overlay', sbConnected: isSbConnected() }));
+      x.send(JSON.stringify({
+        source: 'overlay',
+        sbConnected: isSbConnected(),
+        viewportWidth: Math.max(1, Math.round(window.innerWidth || document.documentElement.clientWidth || 0)),
+        viewportHeight: Math.max(1, Math.round(window.innerHeight || document.documentElement.clientHeight || 0)),
+        devicePixelRatio: Number(window.devicePixelRatio) || 1
+      }));
     } catch (e) {}
   }
   function start() {

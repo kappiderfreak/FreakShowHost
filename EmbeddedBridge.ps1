@@ -2340,6 +2340,9 @@ $HeartbeatTimeoutMs = 15000
 $HeartbeatNextCheck = 0
 $OverlaySbConnected = $false   # zuletzt gemeldeter Streamer.bot-Verbindungsstatus des Host-Overlays
 $OverlaySbAt        = 0        # Zeitpunkt der Meldung (fuer "frisch?"-Pruefung)
+$OverlayViewportWidth  = 0     # echte CSS-Viewportbreite der Overlay-WebView (DPI/Zoom bereits enthalten)
+$OverlayViewportHeight = 0
+$OverlayDevicePixelRatio = 1.0
 
 # Angenommene, aber noch STUMME Verbindungen: Browser oeffnen "Vorrats"-Sockets (Preconnect),
 # auf denen erst spaeter (oder nie) eine Anfrage kommt. Ein blockierendes ReadLine darauf wuerde
@@ -2680,6 +2683,18 @@ while ($true) {
       try {
         $hb = if ([string]::IsNullOrWhiteSpace($hbBody)) { $null } else { $hbBody | ConvertFrom-Json -ErrorAction Stop }
         if ($null -ne $hb -and $null -ne $hb.sbConnected) { $OverlaySbConnected = [bool]$hb.sbConnected; $OverlaySbAt = $OverlayBeatLast }
+        if ($null -ne $hb -and $null -ne $hb.viewportWidth) {
+          $vw = 0
+          if ([int]::TryParse(([string]$hb.viewportWidth), [ref]$vw) -and $vw -ge 100 -and $vw -le 20000) { $OverlayViewportWidth = $vw }
+        }
+        if ($null -ne $hb -and $null -ne $hb.viewportHeight) {
+          $vh = 0
+          if ([int]::TryParse(([string]$hb.viewportHeight), [ref]$vh) -and $vh -ge 100 -and $vh -le 20000) { $OverlayViewportHeight = $vh }
+        }
+        if ($null -ne $hb -and $null -ne $hb.devicePixelRatio) {
+          $dpr = 0.0
+          if ([double]::TryParse(([string]$hb.devicePixelRatio), [Globalization.NumberStyles]::Float, [Globalization.CultureInfo]::InvariantCulture, [ref]$dpr) -and $dpr -ge 0.5 -and $dpr -le 8.0) { $OverlayDevicePixelRatio = $dpr }
+        }
       } catch {}
       Write-HttpResponse -Stream $stream -StatusCode 200 -Reason 'OK' -Body '{"ok":true}'
       continue
@@ -2690,7 +2705,8 @@ while ($true) {
       $age = if ($OverlaySbAt -gt 0) { [int64]($nowMs - $OverlaySbAt) } else { -1 }
       $fresh = ($OverlaySbAt -gt 0 -and $age -ge 0 -and $age -lt $HeartbeatTimeoutMs)   # Overlay meldet sich noch?
       $conn = ($fresh -and $OverlaySbConnected)
-      Write-HttpResponse -Stream $stream -StatusCode 200 -Reason 'OK' -Body ('{"ok":true,"overlayRunning":' + $(if ($fresh) { 'true' } else { 'false' }) + ',"sbConnected":' + $(if ($conn) { 'true' } else { 'false' }) + ',"ageMs":' + $age + '}')
+      $dprJson = $OverlayDevicePixelRatio.ToString([Globalization.CultureInfo]::InvariantCulture)
+      Write-HttpResponse -Stream $stream -StatusCode 200 -Reason 'OK' -Body ('{"ok":true,"overlayRunning":' + $(if ($fresh) { 'true' } else { 'false' }) + ',"sbConnected":' + $(if ($conn) { 'true' } else { 'false' }) + ',"ageMs":' + $age + ',"viewportWidth":' + $OverlayViewportWidth + ',"viewportHeight":' + $OverlayViewportHeight + ',"devicePixelRatio":' + $dprJson + '}')
       continue
     }
 
