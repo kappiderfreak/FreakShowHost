@@ -1,4 +1,4 @@
-FreakShow 1.0.1
+FreakShow 1.1.0
 ===============
 
 DEUTSCH

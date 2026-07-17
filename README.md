@@ -89,7 +89,7 @@ smaller automatic-update asset for a release, set the version in `VersionInfo.cs
 `UpdaterVersionInfo.cs`, `VERSION.txt` and `README-FIRST.txt`, then run:
 
 ```powershell
-./Create-UpdatePackage.ps1 -Version 1.0.2 -WriteRepositoryManifest
+./Create-UpdatePackage.ps1 -Version 1.1.0 -WriteRepositoryManifest
 ```
 
 Upload both ZIP files plus `SHA256SUMS.txt` to the matching GitHub release and commit the generated
