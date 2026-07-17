@@ -132,6 +132,23 @@ Nur eine Instanz von FreakShow starten. Port `18081` darf nicht gleichzeitig von
 
 Setzt Darstellung, Hintergrund und Sprache zurück. Vorher bei wichtigen Einstellungen die Konfigurationsdaten außerhalb von Git sichern.
 
+## Automatische Updates
+
+Im Tray-Menü mit **Nach Updates suchen** wird die stabile Versionsdatei des öffentlichen
+FreakShow-Repositories geprüft. Ist eine neuere Version verfügbar, erfolgt die Installation erst
+nach einer ausdrücklichen Bestätigung.
+
+1. Das kleinere Update-ZIP wird in `Updates/` geladen.
+2. FreakShow vergleicht die vollständige SHA-256-Prüfsumme mit dem veröffentlichten Manifest.
+3. Ein separater Update-Helfer wartet, bis FreakShow vollständig beendet wurde.
+4. Nur freigegebene Programmdateien und `app/` werden ersetzt.
+5. FreakShow startet automatisch neu und meldet die erfolgreich installierte Version.
+
+`Content/`, `data/`, `Logs/` und `WebView2UserData/` sind technisch vom Update ausgeschlossen.
+Vor dem Austausch entsteht unter `Updates/backup-*` eine Sicherung. Scheitert das Kopieren, wird
+automatisch zurückgerollt. Die zwei jüngsten Sicherungen bleiben erhalten. Der portable
+FreakShow-Ordner muss für den angemeldeten Windows-Nutzer beschreibbar sein.
+
 ## Speicherung und Ordner
 
 | Bereich | Zweck | Git |
@@ -141,6 +158,7 @@ Setzt Darstellung, Hintergrund und Sprache zurück. Vorher bei wichtigen Einstel
 | `data/config/` | lokale Verbindungen und Einstellungen | ignoriert |
 | `data/state/` | synchronisierter UI-Zustand | ignoriert |
 | `Logs/` | Host- und Bridge-Protokolle | ignoriert |
+| `Updates/` | Downloads und maximal zwei Rollback-Sicherungen | ignoriert |
 | `docs/` | Handbuch, sichere Screenshots und Diagramme | versioniert |
 
 ## Wichtige Hinweise

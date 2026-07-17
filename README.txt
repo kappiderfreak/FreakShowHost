@@ -9,11 +9,13 @@ Start & Bedienung
 -----------------
 1. FreakShow.exe starten (Overlay + Bridge starten zusammen).
 2. Einstellungen: Doppelklick auf das Tray-Symbol (oeffnet http://127.0.0.1:18081/).
-3. Beenden: Tray-Symbol rechtsklicken -> Beenden.
+3. Updates: Tray-Symbol rechtsklicken -> Nach Updates suchen.
+4. Beenden: Tray-Symbol rechtsklicken -> Beenden.
 
 Ordnerstruktur
 --------------
   FreakShow.exe            Host (Host.cs, EmbeddedBridge.ps1 als Ressource)
+  FreakShowUpdater.exe     Sicherer Austausch nach dem Beenden + Rollback
   app\                     Anwendung: index.html (Overlay), websocket-diagnose.html
                            (Einstellungsseite) + 16 Overlay-JS-Module
   Content\                 Nur Medien: images\, backgrounds\, media\videos\
@@ -22,6 +24,7 @@ Ordnerstruktur
   data\config\             Dauerhafte Einstellungen (JSON, inkl. ui-state.json,
                            allowed-ips.json, pause-hotkey.json, websocket-config.json)
   data\state\              Laufzeitzustand (overlay-output.json, video-pause.json ...)
+  Updates\                 Geladene Pakete und maximal zwei Rollback-Sicherungen
 
 Funktionen (Auszug, Stand Juli 2026)
 ------------------------------------
@@ -42,6 +45,8 @@ Funktionen (Auszug, Stand Juli 2026)
   aus dem Internet in den Arbeitsspeicher geladen. Lokale HTML-Kopien sind nicht noetig.
 - Oberflaeche dreisprachig (Deutsch/Englisch/Spanisch), Hintergrund als Bild ODER
   Video (Live-Wallpaper).
+- Ein-Klick-Updates ueber GitHub mit SHA-256-Pruefung. Content, data, Logs und
+  WebView2UserData sind vom Updater gesperrt und werden niemals ueberschrieben.
 
 Hinweise
 --------
@@ -52,7 +57,9 @@ Hinweise
 
 Build
 -----
-Build.ps1 erstellt die EXE mit dem vorhandenen Windows-.NET-Framework-Compiler
+Build.ps1 erstellt Host und Update-Helfer mit dem Windows-.NET-Framework-Compiler
 (csc.exe); ein separates .NET-SDK ist nicht erforderlich. EmbeddedBridge.ps1 wird
 als Ressource eingebettet: Aenderungen an Host.cs ODER EmbeddedBridge.ps1 brauchen
 einen Rebuild; app\- und Content\-Dateien wirken nach einem Seiten-/Overlay-Reload.
+Create-UpdatePackage.ps1 baut das vollstaendige Release-ZIP, das kleinere
+Update-ZIP, SHA256SUMS.txt und das stabile update-manifest.json.

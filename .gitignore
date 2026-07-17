@@ -6,6 +6,7 @@
 # --- Build-Artefakte ---
 *.exe
 !FreakShow.exe
+!FreakShowUpdater.exe
 *.new.exe
 *.pdb
 *.suo
@@ -18,6 +19,9 @@ WebView2UserData/
 # --- Logs ---
 Logs/
 *.log
+Updates/
+.update-test/
+release-output/
 
 # --- Persönliche Nutzerdaten & Laufzeit-Zustand ---
 # (Cheatsheet, Bilder-/Video-Overlays, LAN-/IP-Freigabe, Streamer.bot-Config, UI-State …)
@@ -30,6 +34,8 @@ data/state/*
 # Nutzer bringen ihre eigenen Bilder/Videos/Hintergründe mit.
 Content/*
 !Content/.gitkeep
+!Content/OverlayIcon.png
+!Content/README-MEDIA.txt
 
 # --- Maschinenspezifische Pfad-Config (App defaultet ohne sie auf <exe-Ordner>\Content) ---
 FreakShow.config.json
