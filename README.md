@@ -1,8 +1,8 @@
-# FreakShowHost
+# FreakShow
 
 **Your stream. Your rules. One place to control the whole show.**
 
-FreakShowHost is a self-contained Windows overlay control center built for creative, interactive
+FreakShow is a self-contained Windows overlay control center built for creative, interactive
 streams. It brings videos, images, notes, viewer effects and external web overlays together in one
 clean browser interface, while a transparent output window places everything exactly where it
 belongs on screen.
@@ -14,8 +14,8 @@ the show can be prepared, adjusted and triggered from another PC without interru
 ## Download
 
 Ready-to-run Windows packages are available under **[Releases](../../releases)**. Download the
-newest `FreakShowHost-<version>-windows-x64.zip`, extract the complete folder and read the included
-`README-FIRST.txt` before starting `FreakShowHost.exe`.
+newest `FreakShow-<version>-windows-x64.zip`, extract the complete folder and read the included
+`README-FIRST.txt` before starting `FreakShow.exe`.
 
 ## Documentation
 
@@ -75,7 +75,7 @@ Windows. `EmbeddedBridge.ps1` is embedded as a resource, so changes to **`Host.c
 page / overlay reload.
 
 ## Run
-Start `FreakShowHost.exe` (overlay + bridge start together). Open settings by double-clicking the
+Start `FreakShow.exe` (overlay + bridge start together). Open settings by double-clicking the
 **tray icon** (opens `http://127.0.0.1:18081/`). Quit from the tray menu.
 
 ## Screenshots

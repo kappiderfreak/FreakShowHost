@@ -306,7 +306,7 @@ internal sealed class OverlayForm : Form
         catch (Exception ex)
         {
             HostLog.Write("WebView2 initialization failed: " + ex);
-            MessageBox.Show("FreakShowHost konnte WebView2 nicht starten.\n\n" + ex.Message, "FreakShowHost", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("FreakShow konnte WebView2 nicht starten.\n\n" + ex.Message, "FreakShow", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Close();
         }
     }
@@ -563,7 +563,7 @@ internal sealed class OverlayForm : Form
             tray.Icon = File.Exists(ico) ? new Icon(ico) : Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         }
         catch { tray.Icon = SystemIcons.Application; }
-        tray.Text = "FreakShowHost";
+        tray.Text = "FreakShow";
         ContextMenuStrip menu = new ContextMenuStrip();
         ToolStripMenuItem settings = new ToolStripMenuItem("Einstellungen öffnen");
         settings.Click += delegate { OpenSettings(); };
@@ -594,7 +594,7 @@ internal static class Program
     private static void Main(string[] args)
     {
         bool created;
-        mutex = new Mutex(true, "Local\\FreakShowHost.SingleInstance", out created);
+        mutex = new Mutex(true, "Local\\FreakShow.SingleInstance", out created);
         if (!created)
         {
             try { Process.Start("http://127.0.0.1:18081/"); } catch { }
@@ -606,7 +606,7 @@ internal static class Program
         string baseDir = Path.GetDirectoryName(Application.ExecutablePath);
         string logsDir = Path.Combine(baseDir, "Logs");
         Directory.CreateDirectory(logsDir);
-        HostLog.FilePath = Path.Combine(logsDir, "FreakShowHost.log");
+        HostLog.FilePath = Path.Combine(logsDir, "FreakShow.log");
         Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e) { HostLog.Write("UI ERROR: " + e.Exception); };
         AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e) { HostLog.Write("FATAL: " + e.ExceptionObject); };
 
@@ -614,7 +614,7 @@ internal static class Program
         string appDir = Path.Combine(baseDir, "app");
         if (String.IsNullOrEmpty(contentRoot) || !File.Exists(Path.Combine(appDir, "index.html")) || !File.Exists(Path.Combine(appDir, "websocket-diagnose.html")))
         {
-            MessageBox.Show("Kein gültiger Content-Ordner gefunden.\nBitte FreakShowHost.config.json prüfen.", "FreakShowHost", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("Kein gültiger Content-Ordner gefunden.\nBitte FreakShow.config.json prüfen.", "FreakShow", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
@@ -638,7 +638,7 @@ internal static class Program
         }
         string env = Environment.GetEnvironmentVariable("FREAKSHOW_CONTENT_ROOT");
         if (!String.IsNullOrWhiteSpace(env)) return Normalize(env);
-        string config = Path.Combine(baseDir, "FreakShowHost.config.json");
+        string config = Path.Combine(baseDir, "FreakShow.config.json");
         try
         {
             if (File.Exists(config))

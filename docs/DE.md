@@ -1,21 +1,21 @@
-# FreakShowHost – Handbuch
+# FreakShow – Handbuch
 
 > **Sicherheit:** Zugangsdaten, OAuth-Tokens, Passwörter und persönliche Widget-Links gehören niemals in Git. Persönliche Konfigurationen und Medien werden durch die mitgelieferte `.gitignore` ausgeschlossen.
 
-FreakShowHost verbindet eine transparente Windows-Overlay-Ausgabe mit einer lokalen Steuerungsseite. Videos, Bilder, Notizen, Emoji-Regen und externe Web-Overlays werden an einer Stelle verwaltet und können optional durch Streamer.bot ausgelöst werden.
+FreakShow verbindet eine transparente Windows-Overlay-Ausgabe mit einer lokalen Steuerungsseite. Videos, Bilder, Notizen, Emoji-Regen und externe Web-Overlays werden an einer Stelle verwaltet und können optional durch Streamer.bot ausgelöst werden.
 
-![Aufbau von FreakShowHost](architecture.svg)
+![Aufbau von FreakShow](architecture.svg)
 
 ## Schnellstart
 
-1. `FreakShowHost.exe` starten. Overlay, lokaler Webserver und Bridge starten gemeinsam.
+1. `FreakShow.exe` starten. Overlay, lokaler Webserver und Bridge starten gemeinsam.
 2. Die Steuerung lokal unter `http://127.0.0.1:18081/` öffnen. Ein Doppelklick auf das Tray-Symbol öffnet dieselbe Seite.
 3. Oben Monitorformat, Breite/Höhe und bei mehreren Bildschirmen den Zielbildschirm festlegen.
 4. **Overlay-Ausgabe** einschalten.
 5. Über das Symbol oben rechts **Einstellungen → Verbindungen** öffnen und Streamer.bot einrichten.
 6. Medien ausschließlich über die Oberfläche hinzufügen oder in der vorgesehenen `Content/`-Struktur ablegen.
 
-Nur eine Instanz von FreakShowHost starten. Port `18081` darf nicht gleichzeitig von einer alten Bridge oder einer zweiten Instanz benutzt werden.
+Nur eine Instanz von FreakShow starten. Port `18081` darf nicht gleichzeitig von einer alten Bridge oder einer zweiten Instanz benutzt werden.
 
 ## Oberfläche
 

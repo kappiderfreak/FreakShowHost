@@ -1773,7 +1773,7 @@ function Get-ExternalPreviewHtml {
   }
   try {
     try { [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 } catch {}
-    $response = Invoke-WebRequest -Uri $def.Url -UseBasicParsing -TimeoutSec 8 -Headers @{ 'User-Agent' = 'FreakShowHost/1.0 overlay-preview' } -ErrorAction Stop
+    $response = Invoke-WebRequest -Uri $def.Url -UseBasicParsing -TimeoutSec 8 -Headers @{ 'User-Agent' = 'FreakShow/1.0 overlay-preview' } -ErrorAction Stop
     $html = Set-ExternalPreviewBase -Html ([string]$response.Content) -BaseHref ([string]$def.Base)
     if ([string]::IsNullOrWhiteSpace($html) -or $html.Length -lt 128) { throw 'empty preview response' }
     $script:ExternalPreviewCache[$Kind] = $html

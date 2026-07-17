@@ -1,19 +1,19 @@
-FreakShowHost – Streaming-Overlay-Host (Stand: 12.07.2026)
+FreakShow – Streaming-Overlay-Host (Stand: 12.07.2026)
 ===========================================================
 
-FreakShowHost.exe ist ein eigenstaendiger Overlay-Host: WebView2-Overlay-Fenster,
+FreakShow.exe ist ein eigenstaendiger Overlay-Host: WebView2-Overlay-Fenster,
 Tray-Menue, Monitorwahl, Einzelinstanz, Windows-Autostart und die eingebettete
 PowerShell-Bridge (HTTP auf Port 18081) laufen in EINEM Prozess.
 
 Start & Bedienung
 -----------------
-1. FreakShowHost.exe starten (Overlay + Bridge starten zusammen).
+1. FreakShow.exe starten (Overlay + Bridge starten zusammen).
 2. Einstellungen: Doppelklick auf das Tray-Symbol (oeffnet http://127.0.0.1:18081/).
 3. Beenden: Tray-Symbol rechtsklicken -> Beenden.
 
 Ordnerstruktur
 --------------
-  FreakShowHost.exe        Host (Host.cs, EmbeddedBridge.ps1 als Ressource)
+  FreakShow.exe            Host (Host.cs, EmbeddedBridge.ps1 als Ressource)
   app\                     Anwendung: index.html (Overlay), websocket-diagnose.html
                            (Einstellungsseite) + 16 Overlay-JS-Module
   Content\                 Nur Medien: images\, backgrounds\, media\videos\

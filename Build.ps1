@@ -8,7 +8,7 @@ if (-not (Test-Path -LiteralPath $psAssembly)) { throw "PowerShell-Assembly fehl
 
 $args = @(
   '/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/debug-',
-  ('/out:' + (Join-Path $root 'FreakShowHost.exe')),
+  ('/out:' + (Join-Path $root 'FreakShow.exe')),
   ('/win32icon:' + (Join-Path $root 'OverlayIcon.ico')),
   ('/resource:' + (Join-Path $root 'EmbeddedBridge.ps1') + ',EmbeddedBridge.ps1'),
   '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
@@ -20,5 +20,5 @@ $args = @(
 
 & $csc $args
 if ($LASTEXITCODE -ne 0) { throw "Build fehlgeschlagen (csc exit $LASTEXITCODE)." }
-Copy-Item -LiteralPath (Join-Path $root 'App.config') -Destination (Join-Path $root 'FreakShowHost.exe.config') -Force
-Write-Host 'Build OK: FreakShowHost.exe'
+Copy-Item -LiteralPath (Join-Path $root 'App.config') -Destination (Join-Path $root 'FreakShow.exe.config') -Force
+Write-Host 'Build OK: FreakShow.exe'

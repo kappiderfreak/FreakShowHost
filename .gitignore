@@ -1,11 +1,11 @@
-# ===== FreakShowHost – .gitignore =====
+# ===== FreakShow – .gitignore =====
 # Ziel: NUR Code/Build-Skripte ins Repo. KEINE Medien (urheberrechtlich + groß),
 # keine persönlichen Einstellungen, keine Build-/Laufzeit-Artefakte.
 # WICHTIG: git ignoriert diese Dinge nur – auf der Platte bleibt ALLES erhalten.
 
 # --- Build-Artefakte ---
 *.exe
-!FreakShowHost.exe
+!FreakShow.exe
 *.new.exe
 *.pdb
 *.suo
@@ -32,7 +32,7 @@ Content/*
 !Content/.gitkeep
 
 # --- Maschinenspezifische Pfad-Config (App defaultet ohne sie auf <exe-Ordner>\Content) ---
-FreakShowHost.config.json
+FreakShow.config.json
 
 # --- OS-/Editor-Krempel ---
 Thumbs.db

@@ -1,11 +1,11 @@
 <svg viewBox="0 0 960 560" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
   <rect x="0" y="0" width="960" height="560" rx="16" fill="#ffffff"/>
   <rect x="0.5" y="0.5" width="959" height="559" rx="16" fill="none" stroke="#d0d7de"/>
-  <text x="480" y="44" text-anchor="middle" font-size="26" font-weight="700" fill="#1f2328">FreakShowHost — how it works</text>
+  <text x="480" y="44" text-anchor="middle" font-size="26" font-weight="700" fill="#1f2328">FreakShow — how it works</text>
 
   <!-- Central single-process container -->
   <rect x="300" y="118" width="360" height="232" rx="14" fill="#eef2ff" stroke="#6b83f0" stroke-width="2"/>
-  <text x="480" y="146" text-anchor="middle" font-size="16" font-weight="700" fill="#3446a8">FreakShowHost.exe  ·  one process</text>
+  <text x="480" y="146" text-anchor="middle" font-size="16" font-weight="700" fill="#3446a8">FreakShow.exe  ·  one process</text>
 
   <rect x="325" y="166" width="310" height="72" rx="10" fill="#ffffff" stroke="#9aa7d6"/>
   <text x="480" y="196" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Overlay window</text>

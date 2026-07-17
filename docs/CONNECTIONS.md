@@ -6,7 +6,7 @@
 
 | Dienst | Typischer Wert | Aufgabe |
 |---|---:|---|
-| FreakShowHost | HTTP `18081` | Steuerungsseite, Bridge und lokale API |
+| FreakShow | HTTP `18081` | Steuerungsseite, Bridge und lokale API |
 | Streamer.bot | WebSocket `8081` | Events, Trigger, Chat und Variablen |
 | ACT/OverlayPlugin | WebSocket `10501` | optionale Spieldaten |
 
