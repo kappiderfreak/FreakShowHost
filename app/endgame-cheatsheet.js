@@ -3,7 +3,7 @@
  * fuer Raid-/Spiel-Notizen. MEHRERE Texte koennen GLEICHZEITIG angezeigt werden,
  * jeder an seiner eigenen Position. Kommt ueber die Bridge (/cheatsheet, jetzt
  * eine LISTE: { items: [...] }; alte Einzelform wird weiter unterstuetzt).
- * Rahmenfarbe ODER Hintergrundbild, Transparenz, Textfarbe, Schriftart - pro Text.
+ * Rahmenfarbe und Hintergrundbild unabhängig, Transparenz, Textfarbe, Schriftart - pro Text.
  * Ein Streamer.bot-Trigger blendet den jeweiligen Text ein/aus (pro Text-ID).
  * Laeuft im echten Overlay (index.html).
  */
@@ -142,24 +142,26 @@
     var bgOpacity = clampNum(cfg.bgOpacity, 0, 100, 85) / 100;
     var textOpacity = clampNum(cfg.textOpacity, 0, 100, 100) / 100;
     var frameColor = cfg.frameColor || '#101826';
+    var frameEnabled = (typeof cfg.frameEnabled === 'boolean') ? cfg.frameEnabled : true;
+    var backgroundEnabled = (typeof cfg.backgroundEnabled === 'boolean') ? cfg.backgroundEnabled : (cfg.mode === 'image');
     var textColor = cfg.textColor || '#e8f0ff';
     var font = cfg.font || 'Segoe UI, sans-serif';
 
     el.style.cssText = 'position:absolute; box-sizing:border-box; pointer-events:none; display:block;'
       + ' left:' + x + 'vw; top:' + y + 'vh; width:' + width + 'vw; max-width:calc(100vw - 6px); max-height:calc(100vh - 6px); overflow:hidden;'
-      + ' padding:10px 12px; border-radius:10px; border:2px solid ' + frameColor + ';'
+      + ' padding:10px 12px; border-radius:10px; border:2px solid ' + (frameEnabled ? frameColor : 'transparent') + ';'
       + ' box-shadow:0 6px 24px rgba(0,0,0,.45);';
 
     var bg = el.querySelector('.kcs-bg');
-    if (cfg.mode === 'image' && String(cfg.bgImage || '').trim()) {
+    if (backgroundEnabled && String(cfg.bgImage || '').trim()) {
       // Gespeicherte volle Bridge-URL auf die eigene Herkunft umbiegen (Tab-/PC-uebergreifend).
-      var _bi = String(cfg.bgImage); var _ci = _bi.indexOf('/content/');
+      var _bi = String(cfg.bgImage).replace(/\/content\/backgrounds\//i, '/content/notes/backgrounds/'); var _ci = _bi.indexOf('/content/');
       var _url = (_ci > 0 && /^https?:\/\//.test(_bi)) ? (location.origin + _bi.slice(_ci)) : _bi;
       bg.style.backgroundImage = 'url("' + _url.replace(/"/g, '%22') + '")';
       bg.style.backgroundColor = 'transparent';
     } else {
       bg.style.backgroundImage = 'none';
-      bg.style.backgroundColor = frameColor;
+      bg.style.backgroundColor = frameEnabled ? frameColor : 'transparent';
     }
     bg.style.opacity = String(bgOpacity);
 

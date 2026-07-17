@@ -2118,11 +2118,14 @@ function Get-SafeGroupFolderName {
 function Get-ImagesContentRoot {
   return ([System.IO.Path]::GetFullPath(($ContentRoot)).TrimEnd('\', '/'))
 }
-# Verschiebt Bilddatei(en) in den Ordner ihrer Gruppe (images/<Gruppe>) bzw. images/ (ohne Gruppe).
+# Verschiebt Bilddatei(en) in den Ordner ihrer Gruppe. Erlaubte Roots sind
+# images/, backgrounds/ und notes/backgrounds/.
 # Erwartet { items: [ { path, group } ] }, liefert { ok, moved: [ { old, new } ] } zurueck.
 function Get-SafeRootName {
   param([object]$Incoming)
-  if ($null -ne $Incoming -and [string]$Incoming.root -eq 'backgrounds') { return 'backgrounds' }
+  $requested = if ($null -ne $Incoming) { ([string]$Incoming.root -replace '\\', '/').Trim('/') } else { '' }
+  if ($requested -eq 'notes/backgrounds') { return 'notes/backgrounds' }
+  if ($requested -eq 'backgrounds') { return 'backgrounds' }
   return 'images'
 }
 function Move-ImagesToGroup {
@@ -2485,10 +2488,16 @@ while ($true) {
         $folder = Split-Path -Parent $abs
         $relFolder = $folder.Substring($contentRoot.Length).Trim($sep).Trim('/')
         $segs = @($relFolder -split '[\\/]+' | Where-Object { $_ })
+        $fileOnly = ($incoming -and $incoming.fileOnly -eq $true)
         $deletedWhat = 'nichts'
+        # Explizite Einzeldatei-Loeschung fuer Hintergruende (auch in notes/backgrounds/).
+        # So kann die Video-Logik niemals versehentlich den ganzen Notes-Ordner entfernen.
+        if ($fileOnly) {
+          if (Test-Path -LiteralPath $abs -PathType Leaf) { Remove-Item -LiteralPath $abs -Force; $deletedWhat = 'file' }
+        }
         # Effekt-Video liegt in Content\<Gruppe>\<Video>\ (>=2 Ebenen tief) -> ganzen Video-Ordner loeschen.
         # Nie Content selbst oder einen Gruppen-Ordner (1 Ebene) loeschen.
-        if ($segs.Count -ge 2 -and $folder.StartsWith($contentRoot + $sep, [System.StringComparison]::OrdinalIgnoreCase)) {
+        elseif ($segs.Count -ge 2 -and $folder.StartsWith($contentRoot + $sep, [System.StringComparison]::OrdinalIgnoreCase)) {
           if (Test-Path -LiteralPath $folder -PathType Container) { Remove-Item -LiteralPath $folder -Recurse -Force; $deletedWhat = 'folder' }
         } else {
           # Sonst (z.B. uploads\x.mp4) nur die einzelne Datei loeschen, nicht den Ordner.

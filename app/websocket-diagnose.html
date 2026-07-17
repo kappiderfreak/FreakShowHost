@@ -5337,8 +5337,8 @@
                   <div class="cheat-field">
                     <span class="cheat-label">Rahmen / Hintergrund</span>
                     <div class="cheat-mode-row">
-                      <label class="switch cheat-mode-switch"><span>Rahmenfarbe</span><input type="radio" name="cheat-mode" value="color" checked><span class="switch-track" aria-hidden="true"></span></label>
-                      <label class="switch cheat-mode-switch"><span>Hintergrundbild</span><input type="radio" name="cheat-mode" value="image"><span class="switch-track" aria-hidden="true"></span></label>
+                      <label class="switch cheat-mode-switch"><span>Rahmenfarbe</span><input id="cheat-frame-enabled" type="checkbox" checked><span class="switch-track" aria-hidden="true"></span></label>
+                      <label class="switch cheat-mode-switch"><span>Hintergrundbild</span><input id="cheat-background-enabled" type="checkbox"><span class="switch-track" aria-hidden="true"></span></label>
                     </div>
                     <div class="cheat-inline" id="cheat-color-wrap">
                       <span class="cheat-sublabel">Farbe</span>
@@ -12886,9 +12886,10 @@
           img.src = dataUrl;
         } catch (e) { cb(dataUrl); }
       }
-      // Hintergrundbild in einen Ordner auf der Platte speichern (Content/backgrounds/).
+      // Hintergrundbild in einen fest erlaubten Ordner auf der Platte speichern.
+      // UI-Hintergründe: Content/backgrounds/; Notizen: Content/notes/backgrounds/.
       // cb bekommt die Datei-URL, oder null (dann Fallback auf den Datenstring im Browser).
-      function uiUploadBackground(dataUrl, origName, cb) {
+      function uiUploadBackground(dataUrl, origName, cb, targetFolder) {
         try {
           if (!/^data:/.test(dataUrl)) { cb(null); return; } // schon eine URL -> nichts hochladen
           var comma = dataUrl.indexOf(','); var b64 = comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
@@ -12916,9 +12917,9 @@
             }
           };
           xhr.onerror = xhr.ontimeout = function () { log('Bridge nicht erreichbar – Hintergrundbild bleibt im Browser-Speicher.', null, 'warn'); cb(null); };
-          // Hintergründe liegen flach in backgrounds/ (Root). NICHT in Cheat-Gruppenordnern –
-          // sonst löscht /video-delete beim Entfernen den ganzen Ordner statt der einen Datei.
-          xhr.send(JSON.stringify({ filename: base + '.' + ext, dataBase64: b64, folder: 'backgrounds' }));
+          targetFolder = String(targetFolder || 'backgrounds').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+          if (targetFolder !== 'notes/backgrounds') targetFolder = 'backgrounds';
+          xhr.send(JSON.stringify({ filename: base + '.' + ext, dataBase64: b64, folder: targetFolder }));
         } catch (e) { cb(null); }
       }
       // Galerie aller gespeicherten Hintergrundbilder (Content/backgrounds/) mit Vorschau + Name.
@@ -12932,9 +12933,7 @@
         return (d[key] && (d[key][lang] || d[key].de)) || '';
       }
       var uiBgGalleryImages = [];
-      // Löscht ein Hintergrundbild endgültig von der Platte (Content/backgrounds/…).
-      // Nutzt die vorhandene, pfad-geprüfte /video-delete-Route (löscht dort nur die
-      // Einzeldatei, weil backgrounds/ nur eine Ebene tief ist).
+      // Löscht ein Hintergrundbild endgültig als EINZELDATEI von der Platte.
       function bridgeDeleteBackground(path, done) {
         try {
           var xhr = new XMLHttpRequest();
@@ -12944,7 +12943,7 @@
           xhr.timeout = 8000;
           xhr.onload = function () { done(xhr.status >= 200 && xhr.status < 300); };
           xhr.onerror = xhr.ontimeout = function () { done(false); };
-          xhr.send(JSON.stringify({ videoPath: path }));
+          xhr.send(JSON.stringify({ videoPath: path, fileOnly: true }));
         } catch (e) { done(false); }
       }
       function deleteBackgroundImage(im) {
@@ -14195,7 +14194,8 @@
         return {
           id: cheatNewPresetId(), name: name || 'Text 1', text: '', group: '', enabled: false,
           x: 66, y: 6, width: 24,               // Prozent des Monitors
-          mode: 'color', frameColor: '#101826', bgImage: '', bgImageName: '', bgOpacity: 85,
+          mode: 'color', frameEnabled: true, backgroundEnabled: false,
+          frameColor: '#101826', bgImage: '', bgImageName: '', bgOpacity: 85,
           textColor: '#e8f0ff', textOpacity: 100, font: 'Segoe UI, sans-serif', fontSize: 20,
           trigger: '', triggerOn: false        // Streamer.bot-Trigger (Custom-Event blendet ein/aus)
         };
@@ -14203,13 +14203,18 @@
       function cheatNormalizePreset(p) {
         var d = cheatDefaultPreset(p && p.name);
         p = p || {};
+        // Einmalige, verlustfreie Migration der alten Notiz-Hintergründe aus
+        // Content/backgrounds/ nach Content/notes/backgrounds/.
+        var normalizedBgImage = String(p.bgImage || '').replace(/\/content\/backgrounds\//i, '/content/notes/backgrounds/');
         return {
           id: p.id || d.id, name: p.name || d.name, text: p.text || '', group: String(p.group || '').trim(), enabled: p.enabled === true,
           x: (typeof p.x === 'number') ? p.x : d.x,
           y: (typeof p.y === 'number') ? p.y : d.y,
           width: (typeof p.width === 'number') ? p.width : d.width,
           mode: (p.mode === 'image') ? 'image' : 'color',
-          frameColor: p.frameColor || d.frameColor, bgImage: p.bgImage || '', bgImageName: p.bgImageName || '',
+          frameEnabled: (typeof p.frameEnabled === 'boolean') ? p.frameEnabled : true,
+          backgroundEnabled: (typeof p.backgroundEnabled === 'boolean') ? p.backgroundEnabled : (p.mode === 'image' && !!normalizedBgImage),
+          frameColor: p.frameColor || d.frameColor, bgImage: normalizedBgImage, bgImageName: p.bgImageName || '',
           bgOpacity: (typeof p.bgOpacity === 'number') ? p.bgOpacity : d.bgOpacity,
           textColor: p.textColor || d.textColor,
           textOpacity: (typeof p.textOpacity === 'number') ? p.textOpacity : d.textOpacity,
@@ -14235,9 +14240,10 @@
       // Editor-Regler -> aktives Preset (ausser x/y, die kommen vom Monitor)
       function cheatReadEditorInto(p) {
         if (!p) return;
-        var modeEl = document.querySelector('input[name="cheat-mode"]:checked');
         p.text = byId('cheat-text') ? byId('cheat-text').innerHTML : '';
-        p.mode = (modeEl && modeEl.value === 'image') ? 'image' : 'color';
+        p.frameEnabled = byId('cheat-frame-enabled') ? !!byId('cheat-frame-enabled').checked : p.frameEnabled !== false;
+        p.backgroundEnabled = byId('cheat-background-enabled') ? !!byId('cheat-background-enabled').checked : !!p.backgroundEnabled;
+        p.mode = p.backgroundEnabled ? 'image' : 'color';
         p.frameColor = byId('cheat-frame-color') ? byId('cheat-frame-color').value : p.frameColor;
         p.bgOpacity = byId('cheat-bg-opacity') ? Number(byId('cheat-bg-opacity').value) : p.bgOpacity;
         p.textColor = byId('cheat-text-color') ? byId('cheat-text-color').value : p.textColor;
@@ -14265,6 +14271,29 @@
           name.title = label;
         }
       }
+      function cheatBackgroundContentPath(url) {
+        var raw = String(url || '').trim();
+        if (!raw || /^data:|^blob:/i.test(raw)) return '';
+        var lower = raw.toLowerCase(), marker = '/content/', at = lower.indexOf(marker);
+        raw = at >= 0 ? raw.slice(at + marker.length) : raw.replace(/^\/+/, '');
+        raw = raw.split(/[?#]/)[0].replace(/\\/g, '/');
+        try {
+          raw = raw.split('/').map(function (part) { return decodeURIComponent(part); }).join('/');
+        } catch (e) {}
+        return /^notes\/backgrounds\//i.test(raw) ? raw : '';
+      }
+      function cheatDeletePresetBackgroundFile(p) {
+        if (!p) return;
+        var path = cheatBackgroundContentPath(p.bgImage);
+        if (!path) return;
+        for (var i = 0; i < cheatPresets.length; i++) {
+          var other = cheatPresets[i];
+          if (other && other.id !== p.id && cheatBackgroundContentPath(other.bgImage).toLowerCase() === path.toLowerCase()) return;
+        }
+        bridgeDeleteBackground(path, function (ok) {
+          if (!ok) log('Notiz-Hintergrund konnte nicht von der Festplatte gelöscht werden.', { path: path }, 'warn');
+        });
+      }
       function cheatApplyEditor(p) {
         var presetEnabled = !!(p && p.enabled);
         if (byId('cheat-enabled')) byId('cheat-enabled').checked = presetEnabled;
@@ -14274,8 +14303,8 @@
         if (byId('cheat-editor-title')) byId('cheat-editor-title').textContent = cheatTitleText;
         cheatSyncGroupSelect();
         if (byId('cheat-text')) byId('cheat-text').innerHTML = p.text || '';
-        var mEls = document.querySelectorAll('input[name="cheat-mode"]');
-        for (var i = 0; i < mEls.length; i++) mEls[i].checked = (mEls[i].value === (p.mode || 'color'));
+        if (byId('cheat-frame-enabled')) byId('cheat-frame-enabled').checked = p.frameEnabled !== false;
+        if (byId('cheat-background-enabled')) byId('cheat-background-enabled').checked = !!p.backgroundEnabled;
         if (typeof syncAllSwitches === 'function') syncAllSwitches();
         if (byId('cheat-frame-color')) byId('cheat-frame-color').value = p.frameColor || '#101826';
         if (byId('cheat-bg-opacity')) byId('cheat-bg-opacity').value = (p.bgOpacity == null ? 85 : p.bgOpacity);
@@ -14292,9 +14321,8 @@
         if (typeof loadBgGallery === 'function') loadBgGallery(); // Galerie zeigt die Hintergründe der Preset-Gruppe
       }
       function cheatUpdateModeWrap() {
-        var modeEl = document.querySelector('input[name="cheat-mode"]:checked');
-        var mode = modeEl ? modeEl.value : 'color';
-        if (byId('cheat-color-wrap')) byId('cheat-color-wrap').hidden = (mode === 'image');
+        var frameEnabled = byId('cheat-frame-enabled') ? !!byId('cheat-frame-enabled').checked : true;
+        if (byId('cheat-color-wrap')) byId('cheat-color-wrap').hidden = !frameEnabled;
         if (byId('cheat-image-wrap')) byId('cheat-image-wrap').hidden = false;
       }
       function cheatUpdateLabels() {
@@ -14355,16 +14383,16 @@
         // radius 10px – absolut auf der ECHTEN Monitorbreite). Ohne das wirkt in der kleinen Vorschau
         // alles viel zu groß.
         box.style.borderStyle = 'solid';
-        box.style.borderColor = (p.frameColor || '#101826');
+        box.style.borderColor = (p.frameEnabled !== false) ? (p.frameColor || '#101826') : 'transparent';
         box.style.borderWidth = (2 * scale) + 'px';
         box.style.padding = (10 * scale) + 'px ' + (12 * scale) + 'px';
         box.style.borderRadius = (10 * scale) + 'px';
         box.style.boxShadow = '0 ' + (6 * scale) + 'px ' + (24 * scale) + 'px rgba(0,0,0,.45)';
         box.title = p.name || 'Text';
         var bg = box.querySelector('.cheat-mon-bg'), txt = box.querySelector('.cheat-mon-text');
-        if (p.mode === 'image' && p.bgImage) {
+        if (p.backgroundEnabled && p.bgImage) {
           bg.style.backgroundImage = 'url("' + String(rebaseBridgeUrl(p.bgImage)).replace(/"/g, '%22') + '")'; bg.style.backgroundColor = 'transparent';
-        } else { bg.style.backgroundImage = 'none'; bg.style.backgroundColor = p.frameColor || '#101826'; }
+        } else { bg.style.backgroundImage = 'none'; bg.style.backgroundColor = (p.frameEnabled !== false) ? (p.frameColor || '#101826') : 'transparent'; }
         bg.style.opacity = String((p.bgOpacity == null ? 85 : p.bgOpacity) / 100);
         // Formatierten Text (Fett/Kursiv/Unterstrichen/Farbe) auch in der Bedienfeld-Vorschau rendern,
         // sonst erscheinen die HTML-Tags roh. Fallback bleibt reiner Text.
@@ -14517,7 +14545,7 @@
         moveBackgroundsForPresets(ids, target); // Hintergrund-Dateien in den Gruppenordner mitziehen
         return changed;
       }
-      // --- Endgame-Hintergründe folgen der Gruppe: backgrounds/<Gruppe>/ (Pro-Gruppe-Pool) ---
+      // --- Notiz-Hintergründe folgen der Gruppe: notes/backgrounds/<Gruppe>/ ---
       function cheatCurrentBgGroup() { return (typeof cheatActivePreset === 'function') ? cheatGroupOf(cheatActivePreset()) : ''; }
       function bgUrlToPath(url) {
         var s = String(url || '').split('?')[0];
@@ -14532,10 +14560,10 @@
           var p = cheatPresets[i];
           if (ids.indexOf(p.id) < 0 || !p.bgImage) continue;
           var rel = bgUrlToPath(p.bgImage);
-          if (/^backgrounds\//i.test(rel)) { items.push({ path: rel, group: targetGroup }); (byPath[rel] = byPath[rel] || []).push(p); }
+          if (/^notes\/backgrounds\//i.test(rel)) { items.push({ path: rel, group: targetGroup }); (byPath[rel] = byPath[rel] || []).push(p); }
         }
         if (!items.length) return;
-        bridgePostJson(BRIDGE_IMAGE_MOVE_URL, { root: 'backgrounds', items: items }, function (r) {
+        bridgePostJson(BRIDGE_IMAGE_MOVE_URL, { root: 'notes/backgrounds', items: items }, function (r) {
           if (!r || !r.moved) return; var changed = false;
           for (var k = 0; k < r.moved.length; k++) {
             var arr = byPath[r.moved[k].old] || [];
@@ -14557,7 +14585,7 @@
           if (cheatCollapsed[cheatCollapseKey(oldName)]) { cheatCollapsed[cheatCollapseKey(newName)] = 1; delete cheatCollapsed[cheatCollapseKey(oldName)]; cheatSaveCollapsed(); }
           cheatPersist(); cheatApplyEditor(cheatActivePreset()); cheatRenderNav(); cheatRenderMonitor();
           // Hintergrundordner auf der Platte umbenennen + bgImage-URLs der Presets anpassen.
-          bridgePostJson(BRIDGE_IMAGE_GROUP_RENAME_URL, { root: 'backgrounds', oldName: oldName, newName: newName }, function (r) {
+          bridgePostJson(BRIDGE_IMAGE_GROUP_RENAME_URL, { root: 'notes/backgrounds', oldName: oldName, newName: newName }, function (r) {
             if (!r || !r.ok || !r.oldFolder || !r.newFolder) return;
             var pref = r.oldFolder + '/', changed = false;
             for (var k = 0; k < cheatPresets.length; k++) {
@@ -14571,8 +14599,8 @@
       function cheatDeleteGroup(g) {
         g = String(g || '').trim(); if (!g) return;
         confirmDialog('Gruppe löschen?', 'Die Gruppe „' + g + '" wird aufgelöst. Die Texte bleiben erhalten (ohne Gruppe); die Hintergrundbilder dieser Gruppe werden von der Platte gelöscht.', 'Löschen', function () {
-          // Hintergrundordner backgrounds/<g>/ inkl. Dateien löschen; bgImage betroffener Presets leeren.
-          bridgePostJson(BRIDGE_IMAGE_GROUP_DELETE_URL, { root: 'backgrounds', name: g }, function (r) {
+          // Hintergrundordner notes/backgrounds/<g>/ inkl. Dateien löschen; Referenzen leeren.
+          bridgePostJson(BRIDGE_IMAGE_GROUP_DELETE_URL, { root: 'notes/backgrounds', name: g }, function (r) {
             var removed = {};
             if (r && r.deleted) for (var d = 0; d < r.deleted.length; d++) removed[r.deleted[d]] = 1;
             for (var i = 0; i < cheatPresets.length; i++) {
@@ -15314,6 +15342,7 @@
         var p = null; for (var i = 0; i < cheatPresets.length; i++) { if (cheatPresets[i].id === id) { p = cheatPresets[i]; break; } }
         if (!p) return;
         confirmDialog('Willst du das wirklich löschen?', 'Der Text „' + (p.name || '') + '" wird entfernt.', 'Löschen', function () {
+          cheatDeletePresetBackgroundFile(p);
           cheatPresets = cheatPresets.filter(function (x) { return x.id !== id; });
           if (cheatActivePresetId === id) {
             var remainingGroup = cheatSelectedGroup ? cheatGroupPresets(cheatSelectedGroup) : [];
@@ -15353,7 +15382,8 @@
           items.push({
             id: p.id, enabled: p.enabled === true, text: p.text || '',
             x: cheatClamp(p.x, 0, 100), y: cheatClamp(p.y, 0, 100), width: cheatClamp(p.width, 5, 90),
-            mode: p.mode, frameColor: p.frameColor, bgImage: p.bgImage || '', bgOpacity: p.bgOpacity,
+            mode: p.mode, frameEnabled: p.frameEnabled !== false, backgroundEnabled: !!p.backgroundEnabled,
+            frameColor: p.frameColor, bgImage: p.bgImage || '', bgOpacity: p.bgOpacity,
             textColor: p.textColor, textOpacity: p.textOpacity, font: p.font, fontSize: p.fontSize,
             trigger: p.trigger || '', triggerOn: p.triggerOn === true
           });
@@ -15486,15 +15516,18 @@
 
       function initCheatsheet() {
         if (!byId('cheat-enabled')) return;
-        var ids = ['cheat-enabled', 'cheat-text', 'cheat-frame-color', 'cheat-bg-opacity', 'cheat-text-opacity', 'cheat-font', 'cheat-font-size', 'cheat-width', 'cheat-trigger', 'cheat-trigger-on'];
+        var ids = ['cheat-enabled', 'cheat-text', 'cheat-frame-enabled', 'cheat-background-enabled', 'cheat-frame-color', 'cheat-bg-opacity', 'cheat-text-opacity', 'cheat-font', 'cheat-font-size', 'cheat-width', 'cheat-trigger', 'cheat-trigger-on'];
         for (var i = 0; i < ids.length; i++) {
           var el = byId(ids[i]); if (!el) continue;
           var ev = (el.tagName === 'SELECT' || el.type === 'checkbox' || el.type === 'color') ? 'change' : 'input';
           el.addEventListener(ev, cheatOnChange);
           if (el.type === 'range' || el.type === 'color') el.addEventListener('input', cheatUpdateLabels);
         }
-        var modeEls = document.querySelectorAll('input[name="cheat-mode"]');
-        for (var m = 0; m < modeEls.length; m++) modeEls[m].addEventListener('change', function () { cheatUpdateModeWrap(); cheatOnChange(); });
+        var modeIds = ['cheat-frame-enabled', 'cheat-background-enabled'];
+        for (var m = 0; m < modeIds.length; m++) {
+          var modeSwitch = byId(modeIds[m]);
+          if (modeSwitch) modeSwitch.addEventListener('change', cheatUpdateModeWrap);
+        }
 
         var loadBtn = byId('cheat-load-file'), fileIn = byId('cheat-file');
         if (loadBtn && fileIn) {
@@ -15536,8 +15569,12 @@
           imgAction.addEventListener('click', function () {
             var p = cheatActivePreset(); if (!p) return;
             if (p.bgImage) {
-              p.bgImage = ''; p.bgImageName = '';
+              cheatDeletePresetBackgroundFile(p);
+              p.bgImage = ''; p.bgImageName = ''; p.backgroundEnabled = false; p.mode = 'color';
               cheatUpdateImageUi(p);
+              if (byId('cheat-background-enabled')) byId('cheat-background-enabled').checked = false;
+              if (typeof syncAllSwitches === 'function') syncAllSwitches();
+              cheatUpdateModeWrap();
               cheatOnChange();
               return;
             }
@@ -15551,13 +15588,13 @@
               uiDownscaleImage(reader.result, 1400, function (finalUrl) {
                 uiUploadBackground(finalUrl, 'speckzettel_' + f.name, function (savedUrl) {
                   var p = cheatActivePreset(); if (!p) return;
-                  p.bgImage = savedUrl || finalUrl; p.bgImageName = f.name;
+                  p.bgImage = savedUrl || finalUrl; p.bgImageName = f.name; p.backgroundEnabled = true; p.mode = 'image';
                   cheatUpdateImageUi(p);
-                  var imgRadio = document.querySelector('input[name="cheat-mode"][value="image"]');
-                  if (imgRadio) imgRadio.checked = true;
+                  if (byId('cheat-background-enabled')) byId('cheat-background-enabled').checked = true;
+                  if (typeof syncAllSwitches === 'function') syncAllSwitches();
                   cheatUpdateModeWrap();
                   cheatOnChange();
-                });
+                }, 'notes/backgrounds');
               });
             };
             reader.onerror = function () { log('Bild konnte nicht gelesen werden.', null, 'warn'); };
