@@ -83,9 +83,11 @@
       //    (Schluessel weichen ab, hier nicht gerade in Bearbeitung), diesen (untaetigen) Tab neu
       //    laden -> alle bleiben auf demselben Stand, ohne sich gegenseitig zu ueberschreiben.
       function isEditing() { var el = document.activeElement; if (!el) return false; var tg = el.tagName || ''; return tg === 'INPUT' || tg === 'TEXTAREA' || tg === 'SELECT' || el.isContentEditable === true; }
+      var remotePollInFlight = false;
       function pollRemote() {
-        if (saving || Object.keys(pending).length) return; // erst eigene Aenderungen fertig speichern
+        if (saving || Object.keys(pending).length || remotePollInFlight) return; // erst eigene Aenderungen/Request fertig
         try {
+          remotePollInFlight = true;
           var g = new XMLHttpRequest();
           g.open('GET', URL_ + '?t=' + Date.now(), true); g.timeout = 4000;
           g.onload = function () {
@@ -97,8 +99,9 @@
             if (!remote) { for (rk in store) { if (Object.prototype.hasOwnProperty.call(store, rk)) { if (VOLATILE[rk] || pending[rk] !== undefined) continue; if (!(rk in srv)) { remote = true; break; } } } }
             if (remote && !isEditing()) { try { location.reload(); } catch (e) {} }
           };
+          g.onloadend = function () { remotePollInFlight = false; };
           g.send();
-        } catch (e) {}
+        } catch (e) { remotePollInFlight = false; }
       }
       setInterval(pollRemote, 2000);
     })();
@@ -6324,6 +6327,7 @@
       var videoPreviewExpectedSource = '';
       var videoPreviewLoading = false;
       var videoPreviewPendingPlay = false;
+      var videoPreviewSelectionTimer = 0;
 
       function formatVideoTime(seconds) {
         seconds = Math.max(0, seconds || 0);
@@ -6685,6 +6689,10 @@
         var video = byId('video-preview');
         var canvas = byId('video-preview-canvas');
         if (!video || !item || !item.videoPath) return;
+        if (videoPreviewSelectionTimer) {
+          clearTimeout(videoPreviewSelectionTimer);
+          videoPreviewSelectionTimer = 0;
+        }
         var expected = videoMediaUrl(item.videoPath);
         var token = ++videoPreviewLoadToken;
         videoPreviewExpectedSource = expected;
@@ -6707,7 +6715,9 @@
         resetVideoProgressDisplay();
         var wrap = byId('video-progress'); if (wrap) wrap.hidden = false;
         setVideoPreviewLoading(true);
-        video.preload = 'auto';
+        // Beim reinen Auswaehlen nur Metadaten/ersten Frame holen. Erst ein echter
+        // Play-Klick darf den restlichen Film laden; das haelt die LAN-Bridge frei.
+        video.preload = autoplay ? 'auto' : 'metadata';
         video.volume = item.volume / 100;
         video.src = expected;
         video.onloadedmetadata = function () {
@@ -6753,6 +6763,19 @@
           return;
         }
         beginVideoPreviewLoad(item, false);
+      }
+
+      // Rasches Durchklicken erzeugte bisher fuer jeden Zwischenstand einen Video-Request.
+      // Eine sehr kurze Zusammenfassung laedt nur die zuletzt gewaehlte Vorschau.
+      function scheduleVideoProgressForItem(item) {
+        if (videoPreviewSelectionTimer) clearTimeout(videoPreviewSelectionTimer);
+        var expectedId = item && item.id;
+        videoPreviewSelectionTimer = setTimeout(function () {
+          videoPreviewSelectionTimer = 0;
+          var current = selectedVideoOverlay();
+          if (!current || current.id !== expectedId) return;
+          showVideoProgressForItem(current);
+        }, 90);
       }
 
       function hideVideoProgress() {
@@ -6809,6 +6832,7 @@
           video.preload = 'auto';
           setVideoPreviewLoading(true);
           updatePlayPauseButton();
+          try { video.load(); } catch (err) {}
           return;
         }
         var duration = video.duration > 0 && isFinite(video.duration) ? video.duration : 0;
@@ -7389,7 +7413,7 @@
         updateVideoControlLabels();
         applyPreviewAlignment();
         if (needsFile) { stopVideoPreview(); hideVideoProgress(); }
-        else showVideoProgressForItem(item);
+        else scheduleVideoProgressForItem(item);
         updatePlayPauseButton();
         applyVideoStageAspect();
         setTimeout(applyVideoStageAspect, 80);
@@ -7468,7 +7492,9 @@
             renderVideoOverlayList();
             return;
           }
-          stopVideoPreview();
+          // Beim direkten Wechsel bleibt die Timeline als fester Layout-Platzhalter
+          // sichtbar. Sonst springen die darunterliegenden Regler fuer ~90 ms nach oben.
+          stopVideoPreview(true);
           selectedVideoOverlayId = item.id;
           renderVideoOverlayList();
           syncVideoEditor();
@@ -8847,9 +8873,13 @@
         });
       }
 
-      function stopVideoPreview() {
+      function stopVideoPreview(keepProgressLayout) {
         var video = byId('video-preview');
         var canvas = byId('video-preview-canvas');
+        if (videoPreviewSelectionTimer) {
+          clearTimeout(videoPreviewSelectionTimer);
+          videoPreviewSelectionTimer = 0;
+        }
         ++videoPreviewLoadToken;
         videoPreviewExpectedSource = '';
         videoPreviewLoading = false;
@@ -8869,7 +8899,13 @@
         var context = canvas.getContext('2d');
         if (context) context.clearRect(0, 0, canvas.width, canvas.height);
         var cf = byId('video-content-frame'); if (cf) cf.hidden = true;
-        hideVideoProgress();
+        if (keepProgressLayout) {
+          var progressWrap = byId('video-progress');
+          if (progressWrap) progressWrap.hidden = false;
+          resetVideoProgressDisplay();
+        } else {
+          hideVideoProgress();
+        }
         updatePlayPauseButton();
       }
       // Aktuelle Chroma-Werte LIVE aus dem Formular lesen (nicht aus einem alten
@@ -9891,8 +9927,11 @@
         OVERLAYS_ENABLED = !!running;
       }
 
+      var overlayProcessStatusInFlight = false;
       function requestOverlayProcess(action, callback, showLog) {
         if (typeof XMLHttpRequest === 'undefined') return;
+        if (action === 'status' && overlayProcessStatusInFlight) return;
+        if (action === 'status') overlayProcessStatusInFlight = true;
         var method = action === 'status' ? 'GET' : 'POST';
         var xhr = new XMLHttpRequest();
         xhr.open(method, BRIDGE_OVERLAY_URL + '/' + action, true);
@@ -9914,6 +9953,7 @@
           if (typeof callback === 'function') callback(false, {});
         };
         xhr.ontimeout = xhr.onerror;
+        xhr.onloadend = function () { if (action === 'status') overlayProcessStatusInFlight = false; };
         xhr.send();
       }
 
@@ -13804,20 +13844,26 @@
           xhr.send(JSON.stringify({ apps: exclApps }));
         } catch (e) {}
       }
+      var exclLoadInFlight = false;
+      var exclProcessesInFlight = false;
       function exclLoad() {
+        if (exclLoadInFlight) return;
         try {
+          exclLoadInFlight = true;
           var xhr = new XMLHttpRequest();
           xhr.open('GET', BRIDGE_EXCLUDED_APPS_URL + '?t=' + Date.now(), true);
           xhr.timeout = 2500;
           xhr.onload = function () { try { var r = JSON.parse(xhr.responseText || '{}'); exclApps = r.apps || []; exclForeground = r.foreground || ''; exclSuspend = !!r.suspend; exclRender(); } catch (e) {} };
+          xhr.onloadend = function () { exclLoadInFlight = false; };
           xhr.send();
-        } catch (e) {}
+        } catch (e) { exclLoadInFlight = false; }
       }
       function exclLoadProcesses() {
         var sel = byId('excl-app-select'); if (!sel) return;
         // Nicht neu laden, während das Dropdown gerade offen/fokussiert ist.
-        if (document.activeElement === sel) return;
+        if (document.activeElement === sel || exclProcessesInFlight) return;
         try {
+          exclProcessesInFlight = true;
           var xhr = new XMLHttpRequest();
           xhr.open('GET', BRIDGE_RUNNING_PROCESSES_URL + '?t=' + Date.now(), true);
           xhr.timeout = 3500;
@@ -13831,8 +13877,9 @@
               if (prev && r.processes.indexOf(prev) >= 0) sel.value = prev; // Auswahl behalten
             } catch (e) {}
           };
+          xhr.onloadend = function () { exclProcessesInFlight = false; };
           xhr.send();
-        } catch (e) {}
+        } catch (e) { exclProcessesInFlight = false; }
       }
       // Status alle 1,5 s; Programmliste automatisch alle ~6 s (kein Knopf mehr nötig).
       function exclStartStatusPoll() {
@@ -15710,9 +15757,12 @@
         if (t2) { t2.textContent = ovlTxt; t2.style.color = color; }
         if (d2) d2.className = dotCls;
       }
+      var hostStatusInFlight = false;
       function loadHostStatus() {
-        try { var x = new XMLHttpRequest(); x.open('GET', BRIDGE_HOST_STATUS_URL + '?t=' + Date.now(), true); x.timeout = 4000;
-          x.onload = function () { try { renderHostStatus(JSON.parse(x.responseText || '{}')); } catch (e) {} }; x.send(); } catch (e) {}
+        if (hostStatusInFlight) return;
+        try { hostStatusInFlight = true; var x = new XMLHttpRequest(); x.open('GET', BRIDGE_HOST_STATUS_URL + '?t=' + Date.now(), true); x.timeout = 4000;
+          x.onload = function () { try { renderHostStatus(JSON.parse(x.responseText || '{}')); } catch (e) {} };
+          x.onloadend = function () { hostStatusInFlight = false; }; x.send(); } catch (e) { hostStatusInFlight = false; }
       }
       function renderAllowedIps() {
         var host = byId('allowed-ips-list'); if (!host) return;
