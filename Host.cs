@@ -148,7 +148,12 @@ internal sealed class OverlayForm : Form
     private readonly WebView2 web;
     private readonly System.Windows.Forms.Timer monitorTimer;
     private readonly System.Windows.Forms.Timer sbStartupTimer;
+    private readonly System.Windows.Forms.Timer updateTimer;
     private NotifyIcon tray;
+    private ToolStripMenuItem updateMenuItem;
+    private UpdateManifest availableUpdate;
+    private bool updateCheckInFlight;
+    private string notifiedUpdateVersion;
     private int lastMonitor = -999;
     private DateTime lastTopMostFailureLog = DateTime.MinValue;
     private DateTime sbStartupWatchStarted = DateTime.MinValue;
@@ -196,8 +201,20 @@ internal sealed class OverlayForm : Form
         sbStartupTimer.Interval = 5000;
         sbStartupTimer.Tick += async delegate { await CheckStreamerBotStartupAsync(); };
 
+        // Erst nach dem normalen Programmstart pruefen. Danach reicht eine stille
+        // Pruefung alle sechs Stunden; installiert wird immer erst nach Benutzerklick.
+        updateTimer = new System.Windows.Forms.Timer();
+        updateTimer.Interval = 30000;
+        updateTimer.Tick += async delegate
+        {
+            updateTimer.Stop();
+            await CheckForUpdatesAsync(false);
+            updateTimer.Interval = 6 * 60 * 60 * 1000;
+            if (!IsDisposed && !Disposing) updateTimer.Start();
+        };
+
         Load += delegate { InitializeAsync(); };
-        FormClosed += delegate { try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { } try { sbStartupTimer.Stop(); } catch { } if (tray != null) { tray.Visible = false; tray.Dispose(); } };
+        FormClosed += delegate { try { UnregisterHotKey(Handle, HOTKEY_ID); } catch { } try { sbStartupTimer.Stop(); } catch { } try { updateTimer.Stop(); } catch { } if (tray != null) { tray.Visible = false; tray.Dispose(); } };
         CreateTray();
     }
 
@@ -301,6 +318,12 @@ internal sealed class OverlayForm : Form
             sbStartupReloads = 0;
             sbStartupTimer.Start();
             monitorTimer.Start();
+            updateTimer.Start();
+            string installedVersion = UpdateService.ConsumeSuccessfulUpdate(Path.GetDirectoryName(Application.ExecutablePath));
+            if (!String.IsNullOrWhiteSpace(installedVersion) && tray != null)
+            {
+                tray.ShowBalloonTip(7000, UpdateText.UpdatedTitle, UpdateText.UpdatedBody(installedVersion), ToolTipIcon.Info);
+            }
             HostLog.Write("Overlay navigation started.");
         }
         catch (Exception ex)
@@ -554,6 +577,86 @@ internal sealed class OverlayForm : Form
         catch (Exception ex) { HostLog.Write("Could not open settings: " + ex.Message); }
     }
 
+    private async System.Threading.Tasks.Task CheckForUpdatesAsync(bool manual)
+    {
+        if (updateCheckInFlight) return;
+        updateCheckInFlight = true;
+        if (updateMenuItem != null)
+        {
+            updateMenuItem.Enabled = false;
+            updateMenuItem.Text = UpdateText.Checking;
+        }
+
+        try
+        {
+            UpdateManifest manifest = await UpdateService.CheckAsync();
+            availableUpdate = manifest;
+            if (manifest == null)
+            {
+                if (updateMenuItem != null) updateMenuItem.Text = UpdateText.CheckForUpdates;
+                if (manual) MessageBox.Show(UpdateText.CurrentBody, UpdateText.CurrentTitle, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                HostLog.Write("Update check completed: current version is up to date.");
+            }
+            else
+            {
+                if (updateMenuItem != null) updateMenuItem.Text = UpdateText.InstallVersion(manifest.version);
+                HostLog.Write("Update available: " + manifest.version + ".");
+                if (manual)
+                {
+                    await PromptAndInstallUpdateAsync();
+                }
+                else if (!String.Equals(notifiedUpdateVersion, manifest.version, StringComparison.OrdinalIgnoreCase) && tray != null)
+                {
+                    notifiedUpdateVersion = manifest.version;
+                    tray.ShowBalloonTip(9000, UpdateText.UpdateAvailableTitle, UpdateText.UpdateAvailableBody(manifest.version), ToolTipIcon.Info);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            HostLog.Write("Update check failed: " + ex);
+            if (updateMenuItem != null) updateMenuItem.Text = UpdateText.CheckForUpdates;
+            if (manual) MessageBox.Show(UpdateText.CheckFailed + "\n\n" + ex.Message, "FreakShow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            updateCheckInFlight = false;
+            if (updateMenuItem != null) updateMenuItem.Enabled = true;
+        }
+    }
+
+    private async System.Threading.Tasks.Task PromptAndInstallUpdateAsync()
+    {
+        UpdateManifest manifest = availableUpdate;
+        if (manifest == null) return;
+        DialogResult answer = MessageBox.Show(UpdateText.InstallQuestion(manifest.version), UpdateText.UpdateAvailableTitle, MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2);
+        if (answer != DialogResult.Yes) return;
+
+        try
+        {
+            if (updateMenuItem != null)
+            {
+                updateMenuItem.Enabled = false;
+                updateMenuItem.Text = UpdateText.Downloading(manifest.version);
+            }
+            string baseDir = Path.GetDirectoryName(Application.ExecutablePath);
+            HostLog.Write("Downloading update " + manifest.version + ".");
+            string package = await UpdateService.DownloadPackageAsync(manifest, baseDir);
+            UpdateService.LaunchUpdater(package, manifest, baseDir);
+            Application.Exit();
+        }
+        catch (Exception ex)
+        {
+            HostLog.Write("Update install preparation failed: " + ex);
+            MessageBox.Show(UpdateText.InstallFailed + "\n\n" + ex.Message, "FreakShow", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            if (updateMenuItem != null)
+            {
+                updateMenuItem.Enabled = true;
+                updateMenuItem.Text = UpdateText.InstallVersion(manifest.version);
+            }
+        }
+    }
+
     private void CreateTray()
     {
         tray = new NotifyIcon();
@@ -563,20 +666,27 @@ internal sealed class OverlayForm : Form
             tray.Icon = File.Exists(ico) ? new Icon(ico) : Icon.ExtractAssociatedIcon(Application.ExecutablePath);
         }
         catch { tray.Icon = SystemIcons.Application; }
-        tray.Text = "FreakShow";
+        tray.Text = "FreakShow " + FreakShowVersion.Current;
         ContextMenuStrip menu = new ContextMenuStrip();
-        ToolStripMenuItem settings = new ToolStripMenuItem("Einstellungen öffnen");
+        ToolStripMenuItem settings = new ToolStripMenuItem(UpdateText.OpenSettings);
         settings.Click += delegate { OpenSettings(); };
-        ToolStripMenuItem visibility = new ToolStripMenuItem("Overlay anzeigen/ausblenden");
+        ToolStripMenuItem visibility = new ToolStripMenuItem(UpdateText.ToggleOverlay);
         visibility.Click += delegate
         {
             Visible = !Visible;
             if (Visible) EnsureTopMost("tray");
         };
-        ToolStripMenuItem exit = new ToolStripMenuItem("Beenden");
+        updateMenuItem = new ToolStripMenuItem(UpdateText.CheckForUpdates);
+        updateMenuItem.Click += async delegate
+        {
+            if (availableUpdate != null) await PromptAndInstallUpdateAsync();
+            else await CheckForUpdatesAsync(true);
+        };
+        ToolStripMenuItem exit = new ToolStripMenuItem(UpdateText.Exit);
         exit.Click += delegate { Application.Exit(); };
         menu.Items.Add(settings);
         menu.Items.Add(visibility);
+        menu.Items.Add(updateMenuItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(exit);
         tray.ContextMenuStrip = menu;
@@ -603,10 +713,14 @@ internal static class Program
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
         string baseDir = Path.GetDirectoryName(Application.ExecutablePath);
+        UpdateText.Initialize(baseDir);
         string logsDir = Path.Combine(baseDir, "Logs");
         Directory.CreateDirectory(logsDir);
         HostLog.FilePath = Path.Combine(logsDir, "FreakShow.log");
+        UpdateService.CleanupArtifacts(baseDir);
+        UpdateService.ScheduleCleanup(baseDir);
         Application.ThreadException += delegate(object sender, ThreadExceptionEventArgs e) { HostLog.Write("UI ERROR: " + e.Exception); };
         AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs e) { HostLog.Write("FATAL: " + e.ExceptionObject); };
 

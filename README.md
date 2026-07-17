@@ -17,6 +17,15 @@ Ready-to-run Windows packages are available under **[Releases](../../releases)**
 newest `FreakShow-<version>-windows-x64.zip`, extract the complete folder and read the included
 `README-FIRST.txt` before starting `FreakShow.exe`.
 
+## Automatic updates
+
+Open the FreakShow tray menu and select **Check for updates**. FreakShow downloads the smaller
+`FreakShow-update-<version>.zip`, verifies its SHA-256 checksum, closes, replaces the program files
+and restarts automatically. A separate update helper performs the locked EXE replacement and keeps
+a rollback copy. `Content/`, `data/`, `Logs/` and `WebView2UserData/` are blocked from the updater and
+are never overwritten. Installation remains a deliberate user action; FreakShow never installs an
+update silently.
+
 ## Documentation
 
 - **[Deutsches Handbuch](docs/DE.md)** — setup, every workspace, settings and operation
@@ -33,6 +42,7 @@ newest `FreakShow-<version>-windows-x64.zip`, extract the complete folder and re
 - **LAN access** with an IP allow-list, a real Streamer.bot host-status indicator, and a WebSocket
   relay for HTTPS overlays
 - **Global Windows hotkey** to toggle the overlay output (works while a game is focused)
+- **One-click updates** with SHA-256 verification, protected user data and automatic rollback
 - UI available in **German / English / Spanish**
 
 ## Requirements
@@ -73,6 +83,17 @@ For copyright reasons this repository ships **no** images, videos, backgrounds o
 Windows. `EmbeddedBridge.ps1` is embedded as a resource, so changes to **`Host.cs`** or
 **`EmbeddedBridge.ps1`** need a rebuild; files under `app/` and `Content/` take effect after a
 page / overlay reload.
+
+`Build.ps1` also creates `FreakShowUpdater.exe`. To prepare both the complete installer and the
+smaller automatic-update asset for a release, set the version in `VersionInfo.cs`,
+`UpdaterVersionInfo.cs`, `VERSION.txt` and `README-FIRST.txt`, then run:
+
+```powershell
+./Create-UpdatePackage.ps1 -Version 1.0.2 -WriteRepositoryManifest
+```
+
+Upload both ZIP files plus `SHA256SUMS.txt` to the matching GitHub release and commit the generated
+`update-manifest.json` only after the assets are available.
 
 ## Run
 Start `FreakShow.exe` (overlay + bridge start together). Open settings by double-clicking the
