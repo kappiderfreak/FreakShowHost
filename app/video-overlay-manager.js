@@ -12,8 +12,23 @@
   var items = [];
   var lastTriggerToken = -1;
   var videosPaused = false;
-  var DEBOUNCE_MS = 400;   // dasselbe Video innerhalb dieser Zeit nicht neu starten
-  var lastPlayAt = {};
+  // Nur das doppelte Echo DESSELBEN unmittelbar aufeinanderfolgenden Events blocken.
+  // A -> B -> A muss dagegen auch innerhalb weniger Millisekunden erlaubt bleiben.
+  var DUPLICATE_DEBOUNCE_MS = 140;
+  var lastRequestedKey = '';
+  var lastRequestedAt = 0;
+
+  // Neuester Trigger gewinnt. Alte Lade-/Play-Events duerfen einen spaeteren Trigger
+  // niemals mehr ueberholen. Einige zuletzt verwendete Videos bleiben als kleiner
+  // Warm-Pool geladen; alle 85 Videos gleichzeitig zu laden waere kontraproduktiv.
+  var playbackGeneration = 0;
+  var activeVideo = null;
+  var playbackStatus = { generation: 0, id: '', phase: 'idle', requestedAt: 0, playingAt: 0 };
+  var MAX_WARM_PLAYERS = 4;
+  var WARM_IDS_KEY = 'kappi.video.warm.ids.v1';
+  var warmPlayers = Object.create(null);
+  var warmOrder = [];
+  var warmupScheduled = false;
 
   function number(value, fallback, min, max) {
     var parsed = Number(value);
@@ -39,6 +54,12 @@
     return value;
   }
 
+  function pathsMatch(source, configured) {
+    source = normalizePath(source);
+    configured = normalizePath(configured);
+    return !!(source && configured && (source === configured || source.slice(-configured.length) === configured));
+  }
+
   function normalizeItem(item) {
     item = item || {};
     return {
@@ -60,6 +81,159 @@
       managed: item.managed !== false,
       sourceFile: String(item.sourceFile || '')
     };
+  }
+
+  function readWarmIds() {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(WARM_IDS_KEY) || '[]');
+      return Array.isArray(parsed) ? parsed.map(String).filter(Boolean).slice(0, MAX_WARM_PLAYERS) : [];
+    } catch (err) { return []; }
+  }
+
+  function rememberWarmId(id) {
+    id = String(id || '');
+    if (!id) return;
+    var ids = readWarmIds().filter(function (entry) { return entry !== id; });
+    ids.unshift(id);
+    try { localStorage.setItem(WARM_IDS_KEY, JSON.stringify(ids.slice(0, MAX_WARM_PLAYERS))); } catch (err) {}
+  }
+
+  function clearDurationTimer(video) {
+    if (video && video.__kappiDurationTimer) clearTimeout(video.__kappiDurationTimer);
+    if (video) video.__kappiDurationTimer = 0;
+  }
+
+  function removeWarmReference(video) {
+    if (!video) return;
+    var id = String(video.getAttribute('data-kappi-video-id') || '');
+    if (id && warmPlayers[id] === video) delete warmPlayers[id];
+    warmOrder = warmOrder.filter(function (entry) { return entry !== id; });
+  }
+
+  function discardVideo(video) {
+    if (!video) return;
+    removeWarmReference(video);
+    clearDurationTimer(video);
+    try { video.pause(); } catch (err) {}
+    try {
+      video.muted = true;
+      video.volume = 0;
+      video.removeAttribute('src');
+      video.load(); // bricht auch eine noch laufende Range-Anfrage ab
+    } catch (err) {}
+    try { removeChromaCanvas(video); } catch (err) {}
+    video.__kappiVideoConfig = null;
+    video.__kappiGeneration = 0;
+    if (activeVideo === video) activeVideo = null;
+    if (video.parentNode) video.parentNode.removeChild(video);
+  }
+
+  function trimWarmPlayers() {
+    while (warmOrder.length > MAX_WARM_PLAYERS) {
+      var oldestId = warmOrder.pop();
+      var oldest = warmPlayers[oldestId];
+      delete warmPlayers[oldestId];
+      discardVideo(oldest);
+    }
+  }
+
+  function parkWarmVideo(video, config) {
+    if (!video || !config || !config.id || video.error) {
+      discardVideo(video);
+      return;
+    }
+    var id = String(config.id);
+    var previous = warmPlayers[id];
+    if (previous && previous !== video) discardVideo(previous);
+    clearDurationTimer(video);
+    try { video.pause(); } catch (err) {}
+    try {
+      video.muted = true;
+      video.volume = 0;
+      video.currentTime = Math.max(0, config.startSeconds || 0);
+    } catch (err) {}
+    removeChromaCanvas(video);
+    video.style.display = 'none';
+    video.setAttribute('data-kappi-warm', '1');
+    video.setAttribute('data-kappi-video-id', id);
+    video.__kappiVideoConfig = null;
+    video.__kappiGeneration = 0;
+    if (activeVideo === video) activeVideo = null;
+    warmPlayers[id] = video;
+    warmOrder = warmOrder.filter(function (entry) { return entry !== id; });
+    warmOrder.unshift(id);
+    rememberWarmId(id);
+    trimWarmPlayers();
+  }
+
+  function takeWarmVideo(config) {
+    var id = String(config && config.id || '');
+    var video = id ? warmPlayers[id] : null;
+    if (!video) return null;
+    if (video.error) {
+      discardVideo(video);
+      return null;
+    }
+    delete warmPlayers[id];
+    warmOrder = warmOrder.filter(function (entry) { return entry !== id; });
+    video.removeAttribute('data-kappi-warm');
+    return video;
+  }
+
+  function createWarmVideo(config) {
+    if (!config || !config.enabled || !config.id || !config.videoPath || warmPlayers[config.id]) return;
+    // Waehrend einer aktiven Wiedergabe keine Hintergrund-Anfrage vor den echten
+    // Trigger schieben. Das Warmup wird beim naechsten Start/Ende erneut aufgebaut.
+    if (activeVideo) return;
+    var video = document.createElement('video');
+    video.setAttribute('data-kappi-warm', '1');
+    video.setAttribute('data-kappi-video-id', config.id);
+    video.preload = 'auto';
+    video.muted = true;
+    video.volume = 0;
+    video.playsInline = true;
+    video.style.display = 'none';
+    video.src = config.videoPath;
+    warmPlayers[config.id] = video;
+    warmOrder.unshift(String(config.id));
+    document.body.appendChild(video);
+    try { video.load(); } catch (err) {}
+    trimWarmPlayers();
+  }
+
+  function scheduleRecentWarmup() {
+    if (warmupScheduled || !items.length) return;
+    warmupScheduled = true;
+    var ids = readWarmIds();
+    ids.forEach(function (id, index) {
+      setTimeout(function () {
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].id === id) { createWarmVideo(items[i]); break; }
+        }
+      }, 900 + index * 450);
+    });
+  }
+
+  function setPlaybackPhase(video, phase) {
+    if (!video || video.__kappiGeneration !== playbackGeneration) return;
+    playbackStatus.phase = phase;
+    if (phase === 'playing') playbackStatus.playingAt = Date.now();
+  }
+
+  function finishManagedVideo(video) {
+    if (!video) return;
+    var config = video.__kappiVideoConfig;
+    var isCurrent = video.__kappiGeneration === playbackGeneration;
+    if (isCurrent) {
+      playbackStatus.phase = 'idle';
+      activeVideo = null;
+    }
+    // Nur bereits decodierbare Videos warm halten. Ein fehlerhafter oder noch
+    // kalter Ladevorgang wird beendet, damit er den naechsten Trigger nicht blockiert.
+    if (config && video.readyState >= 2 && !video.error) parkWarmVideo(video, config);
+    else discardVideo(video);
+    warmupScheduled = false;
+    setTimeout(scheduleRecentWarmup, 250);
   }
 
   function findForVideo(video) {
@@ -160,6 +334,16 @@
 
   function applyToVideo(video) {
     if (!video || video.tagName !== 'VIDEO') return;
+    if (video.getAttribute('data-kappi-warm') === '1') {
+      // Warm-Player laden nur komprimierte Mediendaten. Keine Chroma-Schleife,
+      // kein Ton und keine sichtbare Ebene, bis ein echter Trigger sie uebernimmt.
+      clearDurationTimer(video);
+      removeChromaCanvas(video);
+      video.muted = true;
+      video.volume = 0;
+      video.style.display = 'none';
+      return;
+    }
     var config = findForVideo(video);
     if (!config) return;
     video.__kappiVideoConfig = config;
@@ -176,11 +360,7 @@
     if (!video.__kappiVideoEventsBound) {
       video.__kappiVideoEventsBound = true;
 
-      var stopAndRemove = function () {
-        try { video.pause(); } catch (err) {}
-        removeChromaCanvas(video);
-        if (video.parentNode) video.parentNode.removeChild(video);
-      };
+      var stopAndRemove = function () { finishManagedVideo(video); };
 
       video.addEventListener('loadedmetadata', function () {
         var current = video.__kappiVideoConfig;
@@ -200,6 +380,10 @@
       });
 
       video.addEventListener('play', function () {
+        if (video.__kappiGeneration !== playbackGeneration) {
+          discardVideo(video);
+          return;
+        }
         var current = video.__kappiVideoConfig;
         if (!current) return;
         video.volume = current.volume / 100;
@@ -212,7 +396,13 @@
         startChroma(video, current);
       });
 
-      video.addEventListener('ended', function () { removeChromaCanvas(video); });
+      video.addEventListener('playing', function () { setPlaybackPhase(video, 'playing'); });
+      video.addEventListener('waiting', function () { setPlaybackPhase(video, 'waiting'); });
+      video.addEventListener('stalled', function () { setPlaybackPhase(video, 'stalled'); });
+      video.addEventListener('error', function () {
+        if (video.__kappiGeneration === playbackGeneration) setPlaybackPhase(video, 'error');
+      });
+      video.addEventListener('ended', stopAndRemove);
     }
     startChroma(video, config);
   }
@@ -226,34 +416,57 @@
     }
   }
 
+  function stopCompetingVideos(except) {
+    var running = document.querySelectorAll('video');
+    for (var i = 0; i < running.length; i++) {
+      var old = running[i];
+      if (old === except) continue;
+      if (old.getAttribute('data-kappi-warm') === '1') {
+        // Ein noch nicht decodierbarer Warmup-Download darf den echten Trigger
+        // auf der seriellen Bridge nicht ausbremsen. Fertige Warm-Player bleiben.
+        if (old.readyState < 2) discardVideo(old);
+        continue;
+      }
+      var oldConfig = old.__kappiVideoConfig || findForVideo(old);
+      try { old.pause(); old.muted = true; old.volume = 0; } catch (err) {}
+      if (oldConfig && old.readyState >= 2 && !old.error) parkWarmVideo(old, oldConfig);
+      else discardVideo(old);
+    }
+  }
+
   function createManagedVideo(config) {
     if (window.__KAPPI_INSTANCE_DEACTIVATED__) return null; // stummgeschaltete Alt-Instanz
     if (window.__KAPPI_OVERLAY_SUSPENDED__) return null;    // App-Ausnahme aktiv (Vordergrund-App)
     if (!config || !config.enabled || !config.videoPath) return null;
-    // Entprellung: dasselbe Video nicht doppelt kurz hintereinander starten
-    // (falls Streamer.bot zwei Events schickt) -> sonst Neustart-Stottern/Echo.
+    // Nur ein direktes Doppel-Echo blocken. Der Wechsel A -> B -> A ist erlaubt,
+    // auch wenn alle drei Streamer.bot-Events innerhalb von 140 ms eintreffen.
     var dkey = String(config.id || config.trigger || config.videoPath);
     var now = Date.now();
-    if (lastPlayAt[dkey] && (now - lastPlayAt[dkey]) < DEBOUNCE_MS) return null;
-    lastPlayAt[dkey] = now;
-    // Kein Stapeln / kein Echo: ALLE bereits laufenden Overlay-Videos hart stoppen
-    // -- egal von welcher Datei sie erzeugt wurden. WICHTIG: removeChild allein
-    // stoppt den Ton NICHT (losgelöste Video-Elemente spielen weiter) -> zuerst
-    // pausieren + Quelle leeren, sonst hört man ein Echo (mehrere Tonspuren).
-    var running = document.querySelectorAll('video');
-    for (var e = 0; e < running.length; e++) {
-      var old = running[e];
-      try { old.pause(); } catch (err) {}
-      try { old.muted = true; old.volume = 0; old.removeAttribute('src'); old.load(); } catch (err) {}
-      try { removeChromaCanvas(old); } catch (err) {}
-      if (old.parentNode) old.parentNode.removeChild(old);
+    if (dkey === lastRequestedKey && (now - lastRequestedAt) < DUPLICATE_DEBOUNCE_MS) {
+      // "true" ist absichtlich ein Erfolgswert: Die alten Einzelmodule duerfen
+      // bei einem geblockten Echo NICHT ihren kalten Fallback-Player starten.
+      return true;
     }
-    var video = document.createElement('video');
+    lastRequestedKey = dkey;
+    lastRequestedAt = now;
+
+    playbackGeneration += 1;
+    var generation = playbackGeneration;
+    var video = takeWarmVideo(config);
+    stopCompetingVideos(video);
+    if (!video) video = document.createElement('video');
+
+    removeChromaCanvas(video);
+    clearDurationTimer(video);
+    video.removeAttribute('data-kappi-warm');
     video.setAttribute('data-kappi-video-id', config.id);
-    video.src = config.videoPath;
+    video.__kappiGeneration = generation;
+    video.__kappiVideoConfig = config;
+    video.preload = 'auto';
     video.autoplay = true;
     video.controls = false;
     video.playsInline = true;
+    video.muted = false;
     video.style.position = 'fixed';
     video.style.inset = '0';
     video.style.width = '100vw';
@@ -261,18 +474,35 @@
     video.style.objectFit = config.sideBars === false ? 'cover' : 'contain';
     video.style.pointerEvents = 'none';
     video.style.zIndex = '1200';
+    video.style.display = 'block';
+    video.style.opacity = '';
     // Eigene GPU-Ebene erzwingen, damit das (erste) Video sofort gezeichnet wird
     // und nicht durchsichtig bleibt (WebView2-Erstframe-Effekt nach Neustart).
     video.style.transform = 'translateZ(0)';
     video.style.backfaceVisibility = 'hidden';
-    document.body.appendChild(video);
+    var currentPath = video.currentSrc || video.src || video.getAttribute('src');
+    var sourceChanged = !pathsMatch(currentPath, config.videoPath);
+    if (sourceChanged) video.src = config.videoPath;
+    if (!video.parentNode) document.body.appendChild(video);
     applyToVideo(video);
-    video.addEventListener('ended', function () {
-      removeChromaCanvas(video);
-      if (video.parentNode) video.parentNode.removeChild(video);
-    });
+    activeVideo = video;
+    playbackStatus = {
+      generation: generation,
+      id: dkey,
+      phase: sourceChanged ? 'loading' : 'warm',
+      requestedAt: now,
+      playingAt: 0
+    };
+    if (sourceChanged) {
+      try { video.load(); } catch (err) {}
+    } else {
+      try { video.currentTime = Math.max(0, config.startSeconds || 0); } catch (err) {}
+    }
     var promise = video.play();
-    if (promise && typeof promise.catch === 'function') promise.catch(function () {});
+    if (promise && typeof promise.catch === 'function') promise.catch(function () {
+      if (video.__kappiGeneration === playbackGeneration) setPlaybackPhase(video, 'play-blocked');
+    });
+    rememberWarmId(config.id);
     return video;
   }
 
@@ -364,6 +594,7 @@
           items = source.map(normalizeItem);
           videosPaused = !!response.paused;
           scanVideos(document);
+          scheduleRecentWarmup();
         } catch (err) {}
       };
       xhr.send();
@@ -464,7 +695,14 @@
       return null;
     },
     playTrigger: playByTrigger,
-    status: function () { return { active: true, items: items.slice() }; }
+    status: function () {
+      return {
+        active: true,
+        items: items.slice(),
+        playback: Object.assign({}, playbackStatus),
+        warm: warmOrder.slice()
+      };
+    }
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
