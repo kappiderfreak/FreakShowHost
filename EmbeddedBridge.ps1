@@ -1900,6 +1900,12 @@ function Write-BinaryFileResponse {
   $fileInfo = Get-Item -LiteralPath $Path
   $contentType = Get-ContentTypeForPath $Path
   $isMedia = Test-IsCacheableMediaPath $Path
+  $mediaExtension = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+  $isStreamMedia = @('.webm','.mp4','.mov','.m4v','.mp3','.wav','.ogg','.ogv') -contains $mediaExtension
+  # Die Bridge verarbeitet Requests absichtlich in einer kontrollierten Schleife. Ein offener
+  # Video-Range-Request darf deshalb nicht die komplette Datei am Stueck belegen: kurze 2-MiB-
+  # Antworten geben /trigger-video, Status und der Bedienseite zwischen zwei Bloecken Vorrang.
+  $maxStreamChunkBytes = [int64](2 * 1024 * 1024)
   $cacheControl = if ($isMedia) { 'private, no-cache, must-revalidate' } else { 'no-store' }
   $validators = if ($isMedia) { Get-MediaValidators $fileInfo } else { $null }
 
@@ -1937,6 +1943,9 @@ function Write-BinaryFileResponse {
       $partial = $true
     }
   }
+  if ($isStreamMedia -and $partial -and (($end - $start + 1) -gt $maxStreamChunkBytes)) {
+    $end = [Math]::Min([int64]$fileInfo.Length - 1, $start + $maxStreamChunkBytes - 1)
+  }
   $contentLength = $end - $start + 1
   $responseHeaders = New-Object System.Collections.Generic.List[string]
   $responseHeaders.Add($(if ($partial) { 'HTTP/1.1 206 Partial Content' } else { 'HTTP/1.1 200 OK' }))
@@ -1959,7 +1968,7 @@ function Write-BinaryFileResponse {
   try {
     [void]$fileStream.Seek($start, [System.IO.SeekOrigin]::Begin)
     $remaining = $contentLength
-    $buffer = New-Object byte[] 16384
+    $buffer = New-Object byte[] 65536
     while ($remaining -gt 0 -and ($read = $fileStream.Read($buffer, 0, [int][Math]::Min($buffer.Length, $remaining))) -gt 0) {
       $Stream.Write($buffer, 0, $read)
       $remaining -= $read
@@ -2397,7 +2406,7 @@ while ($true) {
     }
     # Sicherheits-Timeouts fuer Request-Body/Antwort. Unvollstaendige HTTP-Header werden
     # darunter vor jedem ReadLine nicht-blockierend erkannt und weiter geparkt.
-    try { $client.ReceiveTimeout = 3000; $client.SendTimeout = 10000; $client.NoDelay = $true } catch {}
+    try { $client.ReceiveTimeout = 3000; $client.SendTimeout = 3000; $client.NoDelay = $true } catch {}
     # IP-Freigabe pruefen: nicht freigegebene Geraete bekommen eine verstaendliche 403-Antwort
     # (statt eines nackten Verbindungsresets) und werden dann getrennt. Loopback + die eigenen
     # Adressen dieses PCs sind immer erlaubt.

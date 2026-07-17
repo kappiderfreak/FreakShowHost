@@ -19,16 +19,14 @@
   var lastRequestedAt = 0;
 
   // Neuester Trigger gewinnt. Alte Lade-/Play-Events duerfen einen spaeteren Trigger
-  // niemals mehr ueberholen. Einige zuletzt verwendete Videos bleiben als kleiner
-  // Warm-Pool geladen; alle 85 Videos gleichzeitig zu laden waere kontraproduktiv.
+  // niemals mehr ueberholen. Nur ein VOLLSTAENDIG gepuffertes Video darf warm bleiben;
+  // Hintergrund-Warmups wuerden auf der seriellen HTTP-Bridge Steuerbefehle blockieren.
   var playbackGeneration = 0;
   var activeVideo = null;
   var playbackStatus = { generation: 0, id: '', phase: 'idle', requestedAt: 0, playingAt: 0 };
-  var MAX_WARM_PLAYERS = 4;
-  var WARM_IDS_KEY = 'kappi.video.warm.ids.v1';
+  var MAX_WARM_PLAYERS = 1;
   var warmPlayers = Object.create(null);
   var warmOrder = [];
-  var warmupScheduled = false;
 
   function number(value, fallback, min, max) {
     var parsed = Number(value);
@@ -83,21 +81,6 @@
     };
   }
 
-  function readWarmIds() {
-    try {
-      var parsed = JSON.parse(localStorage.getItem(WARM_IDS_KEY) || '[]');
-      return Array.isArray(parsed) ? parsed.map(String).filter(Boolean).slice(0, MAX_WARM_PLAYERS) : [];
-    } catch (err) { return []; }
-  }
-
-  function rememberWarmId(id) {
-    id = String(id || '');
-    if (!id) return;
-    var ids = readWarmIds().filter(function (entry) { return entry !== id; });
-    ids.unshift(id);
-    try { localStorage.setItem(WARM_IDS_KEY, JSON.stringify(ids.slice(0, MAX_WARM_PLAYERS))); } catch (err) {}
-  }
-
   function clearDurationTimer(video) {
     if (video && video.__kappiDurationTimer) clearTimeout(video.__kappiDurationTimer);
     if (video) video.__kappiDurationTimer = 0;
@@ -137,6 +120,16 @@
     }
   }
 
+  function isFullyBuffered(video) {
+    if (!video || video.error || video.readyState < 4) return false;
+    var duration = Number(video.duration);
+    if (!(duration > 0) || !isFinite(duration)) return false;
+    try {
+      if (!video.buffered || !video.buffered.length) return false;
+      return video.buffered.end(video.buffered.length - 1) >= duration - 0.25;
+    } catch (err) { return false; }
+  }
+
   function parkWarmVideo(video, config) {
     if (!video || !config || !config.id || video.error) {
       discardVideo(video);
@@ -162,7 +155,6 @@
     warmPlayers[id] = video;
     warmOrder = warmOrder.filter(function (entry) { return entry !== id; });
     warmOrder.unshift(id);
-    rememberWarmId(id);
     trimWarmPlayers();
   }
 
@@ -180,40 +172,6 @@
     return video;
   }
 
-  function createWarmVideo(config) {
-    if (!config || !config.enabled || !config.id || !config.videoPath || warmPlayers[config.id]) return;
-    // Waehrend einer aktiven Wiedergabe keine Hintergrund-Anfrage vor den echten
-    // Trigger schieben. Das Warmup wird beim naechsten Start/Ende erneut aufgebaut.
-    if (activeVideo) return;
-    var video = document.createElement('video');
-    video.setAttribute('data-kappi-warm', '1');
-    video.setAttribute('data-kappi-video-id', config.id);
-    video.preload = 'auto';
-    video.muted = true;
-    video.volume = 0;
-    video.playsInline = true;
-    video.style.display = 'none';
-    video.src = config.videoPath;
-    warmPlayers[config.id] = video;
-    warmOrder.unshift(String(config.id));
-    document.body.appendChild(video);
-    try { video.load(); } catch (err) {}
-    trimWarmPlayers();
-  }
-
-  function scheduleRecentWarmup() {
-    if (warmupScheduled || !items.length) return;
-    warmupScheduled = true;
-    var ids = readWarmIds();
-    ids.forEach(function (id, index) {
-      setTimeout(function () {
-        for (var i = 0; i < items.length; i++) {
-          if (items[i].id === id) { createWarmVideo(items[i]); break; }
-        }
-      }, 900 + index * 450);
-    });
-  }
-
   function setPlaybackPhase(video, phase) {
     if (!video || video.__kappiGeneration !== playbackGeneration) return;
     playbackStatus.phase = phase;
@@ -228,12 +186,10 @@
       playbackStatus.phase = 'idle';
       activeVideo = null;
     }
-    // Nur bereits decodierbare Videos warm halten. Ein fehlerhafter oder noch
-    // kalter Ladevorgang wird beendet, damit er den naechsten Trigger nicht blockiert.
-    if (config && video.readyState >= 2 && !video.error) parkWarmVideo(video, config);
+    // Nur ein wirklich vollstaendig gepuffertes Video behalten. readyState >= 2
+    // reicht nicht: dann kann im Hintergrund weiterhin eine grosse Range-Anfrage laufen.
+    if (config && isFullyBuffered(video)) parkWarmVideo(video, config);
     else discardVideo(video);
-    warmupScheduled = false;
-    setTimeout(scheduleRecentWarmup, 250);
   }
 
   function findForVideo(video) {
@@ -422,14 +378,14 @@
       var old = running[i];
       if (old === except) continue;
       if (old.getAttribute('data-kappi-warm') === '1') {
-        // Ein noch nicht decodierbarer Warmup-Download darf den echten Trigger
-        // auf der seriellen Bridge nicht ausbremsen. Fertige Warm-Player bleiben.
-        if (old.readyState < 2) discardVideo(old);
+        // Ein nur teilweise geladener Warm-Player darf den echten Trigger nie
+        // ausbremsen. Lediglich vollstaendig gepufferte Daten bleiben im Speicher.
+        if (!isFullyBuffered(old)) discardVideo(old);
         continue;
       }
       var oldConfig = old.__kappiVideoConfig || findForVideo(old);
       try { old.pause(); old.muted = true; old.volume = 0; } catch (err) {}
-      if (oldConfig && old.readyState >= 2 && !old.error) parkWarmVideo(old, oldConfig);
+      if (oldConfig && isFullyBuffered(old)) parkWarmVideo(old, oldConfig);
       else discardVideo(old);
     }
   }
@@ -502,7 +458,6 @@
     if (promise && typeof promise.catch === 'function') promise.catch(function () {
       if (video.__kappiGeneration === playbackGeneration) setPlaybackPhase(video, 'play-blocked');
     });
-    rememberWarmId(config.id);
     return video;
   }
 
@@ -581,8 +536,11 @@
     }
   }
 
+  var settingsRequestInFlight = false;
   function loadSettings() {
+    if (settingsRequestInFlight) return;
     try {
+      settingsRequestInFlight = true;
       var xhr = new XMLHttpRequest();
       xhr.open('GET', SETTINGS_URL + '?t=' + Date.now(), true);
       xhr.timeout = 1800;
@@ -594,11 +552,11 @@
           items = source.map(normalizeItem);
           videosPaused = !!response.paused;
           scanVideos(document);
-          scheduleRecentWarmup();
         } catch (err) {}
       };
+      xhr.onloadend = function () { settingsRequestInFlight = false; };
       xhr.send();
-    } catch (err) {}
+    } catch (err) { settingsRequestInFlight = false; }
   }
 
   function playById(id, force) {
@@ -644,8 +602,11 @@
   }
 
   // Test-Trigger von der Settings-Seite: Video einmal im Overlay zeigen.
+  var triggerRequestInFlight = false;
   function pollTrigger() {
+    if (triggerRequestInFlight) return;
     try {
+      triggerRequestInFlight = true;
       var xhr = new XMLHttpRequest();
       xhr.open('GET', TRIGGER_URL + '?t=' + Date.now(), true);
       xhr.timeout = 1200;
@@ -661,8 +622,9 @@
           }
         } catch (err) {}
       };
+      xhr.onloadend = function () { triggerRequestInFlight = false; };
       xhr.send();
-    } catch (err) {}
+    } catch (err) { triggerRequestInFlight = false; }
   }
 
   var observer = new MutationObserver(function (mutations) {
