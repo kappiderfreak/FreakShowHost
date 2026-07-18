@@ -748,10 +748,10 @@ internal static class Program
     {
         for (int i = 0; i < args.Length - 1; i++)
         {
-            if (String.Equals(args[i], "--content-root", StringComparison.OrdinalIgnoreCase)) return Normalize(args[i + 1]);
+            if (String.Equals(args[i], "--content-root", StringComparison.OrdinalIgnoreCase)) return Normalize(args[i + 1], baseDir);
         }
         string env = Environment.GetEnvironmentVariable("FREAKSHOW_CONTENT_ROOT");
-        if (!String.IsNullOrWhiteSpace(env)) return Normalize(env);
+        if (!String.IsNullOrWhiteSpace(env)) return Normalize(env, baseDir);
         string config = Path.Combine(baseDir, "FreakShow.config.json");
         try
         {
@@ -761,19 +761,24 @@ internal static class Program
                 if (m.Success)
                 {
                     string value = m.Groups[1].Value.Replace("\\\\", "\\").Replace("\\\"", "\"");
-                    return Normalize(value);
+                    return Normalize(value, baseDir);
                 }
             }
         }
         catch (Exception ex) { HostLog.Write("Config read failed: " + ex.Message); }
         string local = Path.Combine(baseDir, "Content");
-        if (Directory.Exists(local)) return Normalize(local);
+        if (Directory.Exists(local)) return Normalize(local, baseDir);
         return null;
     }
 
-    private static string Normalize(string path)
+    private static string Normalize(string path, string baseDir)
     {
-        try { return Path.GetFullPath(Environment.ExpandEnvironmentVariables(path.Trim().Trim('"'))); }
+        try
+        {
+            string expanded = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"'));
+            if (!Path.IsPathRooted(expanded)) expanded = Path.Combine(baseDir, expanded);
+            return Path.GetFullPath(expanded);
+        }
         catch { return null; }
     }
 }
