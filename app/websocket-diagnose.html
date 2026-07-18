@@ -1756,6 +1756,13 @@
       margin-top: 0;
     }
 
+    /* Das leere Statusfeld darf keinen unteren Abstand reservieren. Sonst endet
+       der senkrechte Spaltentrenner kurz vor dem äußeren Panel-Rahmen. */
+    #workspace-view-links #link-check:empty {
+      display: none;
+      margin: 0;
+    }
+
     #workspace-view-links .link-browser {
       flex: 1 1 auto;
       min-height: 0;
@@ -1780,7 +1787,9 @@
       z-index: 2;
       top: 0;
       bottom: 0;
-      left: var(--ed-list-w);
+      /* Die anderen Tabs zeichnen den Trenner als border-right INNERHALB der
+         320-px-Listenspalte. Daher hier ebenfalls genau ein Pixel nach innen. */
+      left: calc(var(--ed-list-w) - 1px);
       border-left: 1px solid rgba(255,255,255,.12);
       pointer-events: none;
     }
@@ -4870,7 +4879,6 @@
       <!-- Echter Host-Status. NUR beim Zugriff von einem ANDEREN PC (LAN) sichtbar – dort können die
            HTTPS-Vorschauen (ChatRD) bauartbedingt „nicht verbunden" zeigen, obwohl es läuft. Steht
            UNTER der Liste + standardmäßig versteckt, damit das Monitor-/Gruppen-Layout unverändert bleibt. -->
-      <p id="overlays-host-status" class="settings-hint" hidden style="margin:10px 2px 4px;"><span class="conn-dot" id="overlays-host-dot"></span> <span id="overlays-host-txt" data-i18n="conn.hostLoading">Status wird geladen …</span></p>
       <div id="link-check" class="note"></div>
     </div>
       </div>
