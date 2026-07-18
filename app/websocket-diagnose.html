@@ -2503,6 +2503,12 @@
       overflow-y: auto;
     }
 
+    /* Ohne einen einzigen Videoeintrag bleibt die komplette Editorfläche leer.
+       Erst „+" erzeugt den ersten Eintrag und blendet den Editor ein. */
+    .video-manager-editor[hidden] {
+      display: none !important;
+    }
+
     /* Kopf und Formular behalten immer ihren Platz; nur die Vorschau
        schrumpft auf den verbleibenden Raum, damit die Buttons sichtbar bleiben. */
     .video-editor-head,
@@ -4976,7 +4982,7 @@
             </div>
           </aside>
 
-          <div class="video-manager-editor">
+          <div class="video-manager-editor" hidden>
             <div class="video-editor-head">
               <h2 id="video-editor-title">Video auswählen</h2>
               <!-- „Bestehende Datei: …"-Anzeige entfernt (nur Info-Text, keine Funktion). -->
@@ -7357,7 +7363,10 @@
         var item = selectedVideoOverlay();
         if (item) videoEditorDeselected = false;
         var editor = document.querySelector('#workspace-view-overlays .video-manager-editor');
-        if (editor) editor.classList.toggle('blank-deselected', videoEditorDeselected);
+        if (editor) {
+          editor.hidden = !videoOverlayItems.length;
+          editor.classList.toggle('blank-deselected', videoEditorDeselected);
+        }
         var settings = byId('video-settings');
         var primaryFields = byId('video-primary-fields');
         var empty = byId('video-preview-empty');
